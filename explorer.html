@@ -6,18 +6,19 @@
 <title>TaskNet</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Geist:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 /* TaskNet (left) and O*NET (right) as a Venn; the overlap holds linked tasks, as in the paper's figure. Type and palette follow the paper's figure. */
 :root{
   color-scheme:light;
-  --bg:#FFFFFF; --ink:#16182B; --muted:rgba(22,24,43,.6); --rule:rgba(22,24,43,.1);
+  --bg:#FFFFFF; --ink:#111111; --muted:rgba(0,0,0,.6); --rule:rgba(0,0,0,.1);
   /* palette from the paper's pair-relation Venn figure */
   --s:#4347C7; --s-fill:#BABCEB; --s-line:#9296DF; --s-ink:#292D72; --s-tint:#EEEEF9;
   --o:#34826B; --o-fill:#ABD2CA; --o-line:#7DB7AB; --o-ink:#225345; --o-tint:#E8F2EF;
   --x-fill:#92B1C8;
-  --f-sans:"Public Sans","Helvetica Neue",Arial,system-ui,sans-serif;   /* the U.S. government's typeface, at home beside O*NET */
-  --f-serif:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --f-sans:"Geist","Helvetica Neue",Arial,system-ui,sans-serif;   /* after the Stanford Digital Economy Lab: a grotesk for text, */
+  --f-serif:"Newsreader",Georgia,"Times New Roman",serif;                        /* a sharp serif for display, */
+  --f-mono:"IBM Plex Mono",SFMono-Regular,Menlo,monospace;                       /* and a mono for labels */
 }
 *{box-sizing:border-box}
 html{overflow:hidden}
@@ -183,7 +184,7 @@ body.loading .scrolly{opacity:0}
 /* the ratings sit in a plain band: no card around each */
 .metrics .m-key{margin-top:4px}
 .metrics > .m-note{order:9} .metrics > .m-key{order:10}
-.detail .m-note{grid-column:1/-1;max-width:none;margin:0;max-width:none;font-size:19px;line-height:1.5;color:var(--muted)}
+.detail .m-note{grid-column:1/-1;max-width:none;margin:-22px 0 0;max-width:none;font-size:19px;line-height:1.5;color:var(--muted)}
 @media (max-width:900px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 28px}}
 @media (max-width:560px){.metrics{grid-template-columns:minmax(0,1fr)}}
 
@@ -201,6 +202,12 @@ body.loading .scrolly{opacity:0}
 /* each linked task on a pale block of the other inventory's colour */
 .lg ul{gap:10px} .lg li{padding:12px 16px;border-radius:2px;background:var(--o-tint)}
 .detail.o .lg li{background:var(--s-tint)}
+
+/* mono for the small labels, as on the Lab's site */
+.m-ends,.d-meta,.detail .lg-h{font-family:var(--f-mono)}
+.m-ends{font-size:13px} .d-meta{font-size:15px;letter-spacing:.01em} .detail .lg-h{font-size:15px;text-transform:uppercase;letter-spacing:.06em;font-weight:500}
+.lg li{border-radius:0}
+.region b{font-family:var(--f-sans);font-weight:700;letter-spacing:-.03em}
 </style>
 </head>
 <body class="loading">
@@ -1262,8 +1269,8 @@ function scaled(name, x, n, lo, hi, def){
 /* a task's O*NET (or TaskNet) counterparts, grouped by how they relate, each group named once */
 function linkGroups(n, other){
   if (!n.links.length) return "";
-  const them = n.inv === "S" ? "O*NET" : "TaskNet", rel = l => n.rel.get(l) === "refines" ? "refines" : "overlaps";
-  const label = k => k === "refines" ? (n.inv === "S" ? "Refines" : "Refined by") + " " + them : "Overlaps " + them;
+  const them = n.inv === "S" ? "O*NET" : "TaskNet", rel = l => n.inv === "S" && n.rel.get(l) === "refines" ? "refines" : "overlaps";   /* O*NET tasks list every link as related */
+  const label = k => (k === "refines" ? "Refines " : "Related to ") + them;
   return `<div class="links">` + ["refines", "overlaps"].map(k => {
     const ls = n.links.filter(l => rel(l) === k); if (!ls.length) return "";
     return `<div class="lg"><p class="lg-h">${label(k)}</p><ul>` +

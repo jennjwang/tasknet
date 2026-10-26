@@ -6,21 +6,22 @@
 <title>TaskNet · All tasks</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Geist:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 /* Dashboard: every task in every occupation at once, as a waffle of squares per occupation (one square per task),
    laid out like the Anthropic Economic Index job explorer, in the type and palette of the main page, drawn by hand on graph paper. Hover or focus a square for the task, its links and ratings. */
 :root{
   color-scheme:light;
-  --bg:#FFFFFF; --ink:#16182B; --muted:rgba(22,24,43,.6); --agate:rgba(22,24,43,.45); --rule:rgba(22,24,43,.1); --field:rgba(22,24,43,.16);
+  --bg:#FFFFFF; --ink:#111111; --muted:rgba(0,0,0,.6); --agate:rgba(0,0,0,.45); --rule:rgba(0,0,0,.1); --field:rgba(0,0,0,.16);
   /* palette from the paper's pair-relation Venn figure, as on the main page */
   --s:#4347C7; --s-ink:#292D72; --s-tint:#EEEEF9; --o-ink:#225345;
   /* squares in the Venn's pastel region fills; the darker inks are for thin marks like the tooltip bars */
   --new:#BABCEB; --linked:#92B1C8; --onet:#ABD2CA;
   --new-ink:#4347C7; --linked-ink:#5E86A8; --onet-ink:#34826B;
   --card:#FFFFFF;
-  --f-sans:"Public Sans","Helvetica Neue",Arial,system-ui,sans-serif;   /* the U.S. government's typeface, at home beside O*NET */
-  --f-serif:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --f-sans:"Geist","Helvetica Neue",Arial,system-ui,sans-serif;   /* after the Stanford Digital Economy Lab: a grotesk for text, */
+  --f-serif:"Newsreader",Georgia,"Times New Roman",serif;                        /* a sharp serif for display, */
+  --f-mono:"IBM Plex Mono",SFMono-Regular,Menlo,monospace;                       /* and a mono for labels */
 }
 *{box-sizing:border-box}
 body{margin:0;color:var(--ink);font-family:var(--f-sans);-webkit-font-smoothing:antialiased}
@@ -132,7 +133,7 @@ h1 span{color:var(--s)}
 .method .compare b{font-weight:600}
 
 /* tooltip as a note card laid on the paper */
-.tip{position:fixed;z-index:1000;width:420px;max-width:calc(100vw - 32px);padding:18px 20px;border-radius:4px;background:var(--card);color:var(--ink);border:1px solid var(--rule);font-size:17px;line-height:1.45;pointer-events:none;opacity:0;transform:scale(.97);transition:opacity .2s,transform .2s;box-shadow:0 1px 2px rgba(22,24,43,.06),0 6px 18px rgba(22,24,43,.08)}
+.tip{position:fixed;z-index:1000;width:420px;max-width:calc(100vw - 32px);padding:18px 20px;border-radius:4px;background:var(--card);color:var(--ink);border:1px solid var(--rule);font-size:17px;line-height:1.45;pointer-events:none;opacity:0;transform:scale(.97);transition:opacity .2s,transform .2s;box-shadow:0 1px 2px rgba(0,0,0,.06),0 6px 18px rgba(0,0,0,.08)}
 .tip.show{opacity:1;transform:none}
 .tip .t-kind{display:flex;align-items:center;gap:6px;margin-bottom:6px;color:var(--muted)}
 .tip .t-kind i{width:11px;height:11px;border-radius:50%;filter:url(#mk-marker)}
@@ -165,6 +166,33 @@ mark{background:#FFF0B3;color:inherit;border-radius:2px}
   .tip{left:50%!important;width:min(400px,100vw - 32px);transform:translateX(-50%) scale(.97)}
   .tip.show{transform:translateX(-50%)}
 }
+
+/* ---- serif display and mono labels ---- */
+.page{padding-top:0}
+.heading{padding-block:64px 44px}
+/* as on the Lab's publication pages: the title in the grotesk (bold here), serif for section heads, mono pills for actions */
+.heading h1{font-family:var(--f-sans);font-weight:700;letter-spacing:-.03em;line-height:1.04}
+.dl-btn{gap:8px;padding:9px 16px;border-radius:999px;background:var(--ink);color:#fff;font-family:var(--f-mono);font-size:14px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.dl-btn:hover{background:var(--s-ink)}
+.dl-btn svg{width:15px;height:15px}
+.explore{margin-top:40px}
+.sec,.method h2{font-weight:400}
+.occ .cat,.rk h3,.stages .fig{font-family:var(--f-mono)}
+.occ .cat{font-size:13px;letter-spacing:.02em}
+.rk h3{font-size:14px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.legend i,.occ rect{border-radius:0}
+
+
+/* the masthead on the Lab's pale teal, as on its publication pages */
+.heading{background:#D8E4DD;box-shadow:0 0 0 100vmax #D8E4DD;clip-path:inset(0 -100vmax)}
+.dl{gap:10px 12px}
+.dl span{margin-left:6px}
+.logos{display:flex;flex-wrap:wrap;align-items:center;gap:14px 36px;margin:20px 0 0}
+.logos > span{display:inline-flex;align-items:flex-start;gap:6px}
+.logos sup{font-size:14px;color:var(--muted);margin-top:-2px}
+.logos img{display:block;width:auto}
+.logos .mercor{display:inline-flex;align-items:center;gap:8px;font-size:26px;font-weight:600;letter-spacing:-.02em;color:#111}
+.explore{margin-top:48px}
 </style>
 </head>
 <body>
@@ -183,15 +211,15 @@ mark{background:#FFF0B3;color:inherit;border-radius:2px}
 <header class="heading">
   <h1><span>TaskNet</span>: Building Occupational Task Inventories from Worker Interviews at Scale</h1>
   <p class="authors"><span>Jennifer Wang<sup>1*</sup></span><span>Andy Haupt<sup>1*</sup></span><span>Isaac Robinson<sup>2</sup></span><span>Phil Lewis<sup>3</sup></span><span>Erik Brynjolfsson<sup>1†</sup></span><span>Diyi Yang<sup>1†</sup></span></p>
-  <p class="affils"><span><sup>1</sup>Stanford University</span><span><sup>2</sup>Mercor</span><span><sup>3</sup>National Center for O*NET Development</span></p>
+  <p class="affils logos" aria-label="Affiliations"><span class="mercor"><sup>1</sup><img src="logos/stanford-s.svg" alt="" height="32">Stanford University</span><span class="mercor"><sup>2</sup><img src="logos/mercor.svg" alt="" height="26">Mercor</span><span class="mercor"><sup>3</sup><img src="logos/onet-mark.svg" alt="" height="32"><span>National Center for O*NET Development</span></span></p>
   <p class="notes"><sup>*</sup>Equal contribution · <sup>†</sup>Equal supervision</p>
-  <p class="dl"><a class="dl-btn" href="tasknet-data.csv" download><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10"/></svg>Download the data (CSV)</a><span>All 320 tasks with their ratings and O*NET links</span></p>
+  <p class="dl"><a class="dl-btn" href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=7670419" target="_blank" rel="noopener">Read paper</a><a class="dl-btn" href="tasknet-data.csv" download><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10"/></svg>Download tasks</a><span>All 320 tasks, with ratings and O*NET links (CSV)</span></p>
 </header>
 
 
 
 <section class="explore" aria-label="Task explorer">
-    <iframe class="explorer" id="explorer" src="explorer.html?v=1793034439" title="Explore the task Venn: hover a dot to read it and its ratings" loading="eager"></iframe>
+    <iframe class="explorer" id="explorer" src="explorer.html?v=1793048397" title="Explore the task Venn: hover a dot to read it and its ratings" loading="eager"></iframe>
 </section>
 
 <div class="info">
@@ -201,9 +229,9 @@ mark{background:#FFF0B3;color:inherit;border-radius:2px}
     <p class="legend"><span><i style="background:var(--new)"></i>New to O*NET</span><span><i style="background:var(--linked)"></i>Overlap with O*NET</span><span><i style="background:var(--onet)"></i>Missing from TaskNet</span></p>
   </div>
   <div class="key" id="key" role="group" aria-label="Show task groups" style="display:none"></div>   <!-- the explorer above carries the 79 / 123 / 30 counts -->
-  <div class="cue"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="rgba(22,24,43,.45)" stroke-width="1.3" aria-hidden="true"><path d="M6 8.5V3.2a1.2 1.2 0 0 1 2.4 0v4.3l3 .6a1.6 1.6 0 0 1 1.3 1.8l-.5 3.4a1.6 1.6 0 0 1-1.6 1.4H7.4a1.6 1.6 0 0 1-1.3-.7L3.6 10.4a1.1 1.1 0 0 1 1.7-1.4z"/></svg><span id="cue">Hover a square for its task and ratings</span></div>
+  <div class="cue"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="rgba(0,0,0,.45)" stroke-width="1.3" aria-hidden="true"><path d="M6 8.5V3.2a1.2 1.2 0 0 1 2.4 0v4.3l3 .6a1.6 1.6 0 0 1 1.3 1.8l-.5 3.4a1.6 1.6 0 0 1-1.6 1.4H7.4a1.6 1.6 0 0 1-1.3-.7L3.6 10.4a1.1 1.1 0 0 1 1.7-1.4z"/></svg><span id="cue">Hover a square for its task and ratings</span></div>
   <div class="toolbar">
-  <label class="searchbar"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="rgba(22,24,43,.45)" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="5"/><path d="m11 11 3.5 3.5"/></svg><input id="q" type="search" placeholder="Search for a task" aria-label="Search for a task"></label>
+  <label class="searchbar"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="rgba(0,0,0,.45)" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="5"/><path d="m11 11 3.5 3.5"/></svg><input id="q" type="search" placeholder="Search for a task" aria-label="Search for a task"></label>
   <div class="sort" hidden><span id="sort-label">Sort by</span>
     <button type="button" id="sort-btn" aria-haspopup="true" aria-expanded="false" aria-labelledby="sort-label sort-btn"><span id="sort-val"></span><svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M2 4h8L6 8.5z"/></svg></button>
     <div class="menu" id="sort-menu" role="menu" hidden></div>
@@ -900,7 +928,7 @@ function bar(label, value, frac, color){
 }
 function showTip(rect){
   const n = byId.get(rect.dataset.id), m = n.m, color = INK[n.group];
-  const links = n.links.length ? `<div class="t-links">${n.links.slice(0, 3).map(l => `<div><em>${l.rel === "refines" ? "Refines" : "Related"}</em>${hl(l.n.text)}</div>`).join("")}${n.links.length > 3 ? `<div><em>+${n.links.length - 3} more</em></div>` : ""}</div>` : "";
+  const links = n.links.length ? `<div class="t-links">${n.links.slice(0, 3).map(l => `<div><em>${l.rel === "refines" && n.inv === "S" ? "Refines" : "Related to"}</em>${hl(l.n.text)}</div>`).join("")}${n.links.length > 3 ? `<div><em>+${n.links.length - 3} more</em></div>` : ""}</div>` : "";
   tip.innerHTML = `<div class="t-kind"><i style="background:${COLOR[n.group]}"></i>${LABEL[n.group]} · ${esc(n.occ)}</div>
     <div class="t-text">${hl(n.text)}</div>
     <div class="t-rows">
