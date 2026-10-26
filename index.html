@@ -35,9 +35,10 @@ html{background:var(--bg)}
 .heading h1{max-width:30ch}
 .authors{display:flex;flex-wrap:wrap;gap:8px 24px;margin:34px 0 0;font-size:26px;font-weight:500;letter-spacing:-.01em;color:var(--ink)}
 .affils{display:flex;flex-wrap:wrap;gap:4px 28px;margin:16px 0 0;font-size:23px;color:var(--muted)}
-.dl{margin:20px 0 0;font-size:18px;color:var(--muted)}
-.dl a{color:var(--s-ink);font-weight:600;text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:3px}
-.dl a:hover{color:var(--s)}
+.dl{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;margin:24px 0 0;font-size:17px;color:var(--muted)}
+.dl-btn{display:inline-flex;align-items:center;gap:9px;padding:11px 20px;border-radius:4px;background:var(--s);color:#fff;font-size:18px;font-weight:600;text-decoration:none;transition:background .15s}
+.dl-btn:hover{background:var(--s-ink)}
+.dl-btn:focus-visible{outline:2px solid var(--s);outline-offset:3px}
 .notes{margin:12px 0 0;font-size:20px;color:var(--agate)}
 .heading sup{font-size:.78em;margin-left:2px;font-weight:500}
 @media (max-width:620px){.heading{padding-block:32px 28px}.authors{font-size:21px;gap:4px 18px}.affils{font-size:18px;gap:2px 16px}}
@@ -184,7 +185,7 @@ mark{background:#FFF0B3;color:inherit;border-radius:2px}
   <p class="authors"><span>Jennifer Wang<sup>1*</sup></span><span>Andy Haupt<sup>1*</sup></span><span>Isaac Robinson<sup>2</sup></span><span>Phil Lewis<sup>3</sup></span><span>Erik Brynjolfsson<sup>1†</sup></span><span>Diyi Yang<sup>1†</sup></span></p>
   <p class="affils"><span><sup>1</sup>Stanford University</span><span><sup>2</sup>Mercor</span><span><sup>3</sup>National Center for O*NET Development</span></p>
   <p class="notes"><sup>*</sup>Equal contribution · <sup>†</sup>Equal supervision</p>
-  <p class="dl">Download the data: <a href="data.csv" download>Tasks and ratings (CSV)</a> · <a href="relationships.csv" download>TaskNet–O*NET links (CSV)</a></p>
+  <p class="dl"><a class="dl-btn" href="tasknet-data.csv" download><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10"/></svg>Download the data (CSV)</a><span>All 320 tasks with their ratings and O*NET links</span></p>
 </header>
 
 
