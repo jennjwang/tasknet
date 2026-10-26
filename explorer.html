@@ -1,0 +1,1643 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TaskNet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* TaskNet (left) and O*NET (right) as a Venn; the overlap holds linked tasks, as in the paper's figure. Type and palette follow the paper's figure. */
+:root{
+  color-scheme:light;
+  --bg:#FFFFFF; --ink:#16182B; --muted:rgba(22,24,43,.6); --rule:rgba(22,24,43,.1);
+  /* palette from the paper's pair-relation Venn figure */
+  --s:#4347C7; --s-fill:#BABCEB; --s-line:#9296DF; --s-ink:#292D72; --s-tint:#EEEEF9;
+  --o:#34826B; --o-fill:#ABD2CA; --o-line:#7DB7AB; --o-ink:#225345; --o-tint:#E8F2EF;
+  --x-fill:#92B1C8;
+  --f-sans:"Inter","Helvetica Neue",Arial,system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{overflow:hidden}
+body{margin:0;color:var(--ink);font-family:var(--f-sans);font-feature-settings:"ss01","cv11";-webkit-font-smoothing:antialiased}
+html{background:transparent}   /* embedded: the dashboard draws the paper */
+.paper{position:fixed;inset:0;z-index:-1;width:100%;height:100%;pointer-events:none}
+/* scroll and tell: story steps scroll on the left while the Venn stays pinned on the right; both sit in the vertical middle of the screen */
+.scrolly{width:100%;margin:0 auto;display:grid;grid-template-columns:minmax(300px,.85fr) minmax(0,1.15fr);gap:80px}
+.story{grid-column:1;grid-row:1;padding-block:64px 0;display:grid;align-content:start}   /* pinned to the top, so a longer task never shifts it */
+/* each step's text fades with the scroll itself (--o, set from its position), not on a timer, so it follows the reader's pace */
+.step{min-height:72vh;display:grid;align-content:center;opacity:var(--fade,0)}
+.step.linger{opacity:1}
+.step p{margin:0;font-size:20.5px;line-height:1.55;max-width:36ch;text-wrap:pretty}
+.step p b{font-weight:700}
+/* a highlighter swipe behind each bold word once its step is on, in the colour of the region it names (lavender by default).
+   Drawn as a background so it follows the words when a phrase wraps onto the next line */
+.step p b{--hc:color-mix(in srgb, var(--hl, var(--s-fill)) 70%, transparent);background:linear-gradient(var(--hc),var(--hc)) no-repeat 0 85%/0% 62%;
+  -webkit-box-decoration-break:clone;box-decoration-break:clone;padding:0 .12em;margin:0 -.12em;border-radius:2px 5px 3px 6px;transition:background-size .15s}
+.step.on p b{background-size:100% 62%;transition:background-size .55s cubic-bezier(.45,0,.25,1) calc(.35s + var(--i, 0)*.4s)}
+@media (prefers-reduced-motion: reduce){.step.on p b{transition:none}}
+
+.step p + p, .step p + blockquote, .step blockquote + p, .step blockquote + blockquote{margin-top:16px}
+.step h1{margin-bottom:18px}
+/* a mock of the interviewer, under the step that introduces it: the exchange plays in turn once the step is on */
+.chat{display:grid;gap:8px;max-width:38ch;margin-top:22px;font-size:16px;line-height:1.45}
+.chat-note{font-size:14px;color:var(--muted)}
+.chat .q,.chat .a{opacity:0;translate:0 6px;transition:opacity .6s, translate .6s}
+.step.on .chat .q,.step.on .chat .a{opacity:1;translate:0 0;transition-delay:calc(.5s + var(--i)*1.1s)}
+.chat .q{justify-self:start;max-width:85%;padding:8px 12px;border:1px solid var(--rule);border-radius:10px 10px 10px 3px;background:var(--bg)}
+.chat .a{justify-self:end;max-width:85%;padding:8px 12px;border-radius:10px 10px 3px 10px;background:var(--s-tint);color:var(--s-ink)}
+/* the follow-up adapts to the answer and asks about what is missing */
+.chat .follow em{display:block;margin-bottom:2px;font-size:13px;font-style:normal;font-weight:600;color:var(--s)}
+@media (prefers-reduced-motion: reduce){.step.on .chat .q,.step.on .chat .a{transition:none}}
+blockquote{margin:0;max-width:38ch;padding-left:14px;border-left:2px solid var(--q, var(--s));font-size:17px;line-height:1.5}
+blockquote cite{display:block;margin-top:6px;font-style:normal;font-size:14.5px;color:var(--muted)}
+.step.explore{gap:28px;min-height:0;opacity:1}
+/* buttons under the Venn, right-aligned with its edge, shown once the reader reaches the explore step */
+.ctas{position:absolute;left:0;top:0;translate:-50% 0;z-index:3;display:flex;gap:28px;opacity:0;pointer-events:none;transition:opacity .4s}
+.ctas.on{opacity:1;pointer-events:auto}
+/* plain underlined text links, like the page's other controls */
+.cta{font-size:19.5px;font-weight:600;color:var(--s-ink);text-decoration:none;white-space:nowrap;padding:2px 0;border-bottom:1px solid currentColor;transition:color .15s}
+.cta:hover{color:var(--s)}
+.cta.here{color:var(--ink);border-bottom:2px solid var(--ink)}
+.cta:focus-visible{outline:2px solid var(--s);outline-offset:3px}
+.step.explore > p{max-width:none;color:var(--muted)}
+.on-touch{display:none}
+@media (hover:none){.on-hover{display:none} .on-touch{display:inline}}
+@media (min-width:901px){.step.explore > p{white-space:nowrap}}
+/* a quiet nudge to keep scrolling, shown after a few idle seconds on a story step */
+.nudge{position:fixed;left:50%;bottom:22px;z-index:20;display:grid;justify-items:center;gap:2px;font-size:14px;font-weight:500;letter-spacing:.04em;color:var(--muted);pointer-events:none;opacity:0;translate:-50% 6px;transition:opacity .6s, translate .6s}
+.nudge.show{opacity:1;translate:-50% 0}
+.nudge svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;animation:nudge 1.6s ease-in-out infinite}
+@keyframes nudge{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
+@media (prefers-reduced-motion: reduce){.nudge svg{animation:none}}
+.step.linger{min-height:160vh;align-content:start}
+.step.linger > *{position:sticky;top:calc(50vh - 2.4em);transition:opacity .3s}
+.step.linger:not(.on) > *{opacity:0}
+.step.explore .chips{justify-content:flex-start}
+.stage-wrap{grid-column:2;grid-row:1;align-self:center}   /* the Venn sits level with the middle of the panel */
+@media (max-width:900px){
+  .scrolly{grid-template-columns:minmax(0,1fr);gap:0}
+  .stage-wrap{grid-column:1;grid-row:1;position:sticky;top:0;z-index:2;background:var(--bg);margin-inline:-20px;padding-inline:20px;box-shadow:0 1px 0 var(--rule)}
+  .ctas{left:50%!important;translate:-50% 0;width:max-content;max-width:calc(100vw - 32px);flex-wrap:wrap;justify-content:center;gap:6px 18px}
+  .cta{font-size:15px}
+  .story{grid-column:1;grid-row:2;padding-block:0}
+  .step{min-height:80vh;align-content:start;padding-top:3vh}
+  .step.explore{min-height:0;padding:20px 0 48px}   /* the explorer sits straight under the Venn */
+  .step p{font-size:19.5px}
+  .step.linger > *{top:calc(54vh + 12px)}
+  .callout{font-size:15px}
+}
+@media (min-width:640px){.nw{white-space:nowrap}}
+h1{margin:0;font-size:clamp(24px,2.8vw,32px);font-weight:700;letter-spacing:-.02em;line-height:1.05}
+h1 span{color:var(--s)}
+.chips{display:flex;flex-wrap:wrap;justify-content:center;gap:2px 13px}
+.chip{font:inherit;font-size:15px;font-weight:500;white-space:nowrap;border:0;background:none;color:var(--muted);padding:4px 0;cursor:pointer;border-bottom:1.5px solid transparent;transition:color .15s,border-color .15s}
+.chip:hover{color:var(--ink)}
+.chip[aria-pressed="true"]{color:var(--ink);border-bottom-color:var(--ink)}
+.chip:focus-visible{outline:2px solid var(--s);outline-offset:3px}
+
+/* equal padding above and below so the labels + Venn block sits in the vertical middle */
+.stage{position:relative;height:660px;width:100%;min-width:0;padding:84px 0 0;display:grid;align-content:start}   /* counts line up with the hint text on the left; the circles end with the ratings */
+@media (max-width:900px){.stage{position:relative;height:420px;padding:84px 0 8px}}   /* fixed: in the dashboard's frame, vh would grow with the frame */
+canvas{display:block;margin:0 auto;touch-action:pan-y;outline:none}
+.region{position:absolute;transition:opacity .4s;display:grid;justify-items:center;text-align:center;pointer-events:none;white-space:nowrap}
+.region b{font-weight:700;font-size:clamp(32px,3.8vw,50px);line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.region span{margin-top:8px;font-size:24px;font-weight:600}
+.region b i{font-style:normal} .region b em{font-style:normal;font-weight:400;opacity:.35;padding-inline:.12em}
+#reg-S{color:var(--s-ink)} #reg-O{color:var(--o-ink)}
+/* each count takes its own region's colour: TaskNet purple, the overlap's blue-grey, O*NET green */
+#reg-L{color:#3438A8} #reg-X{color:#3F6585} #reg-R{color:#276650}   /* darker shades, still each region's hue */
+.region.off{opacity:0}
+/* nothing shows until the fonts are in and the first frame is drawn, then the page fades in */
+.scrolly{transition:opacity .6s}
+body.loading .scrolly{opacity:0}
+/* a task's text that shrinks and glides into its dot, to show what each dot stands for */
+/* callout, after the paper's figure: a task's text below the Venn, joined to its dot by a thin leader line */
+.lead{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+/* like a pen: first a loop is drawn round the dot, then the line runs out from it to the text, then the text appears */
+.lead path{fill:none;stroke:var(--q, var(--o));stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1;stroke-dashoffset:1;transition:opacity .4s}
+.lead g.show .ring{stroke-dashoffset:0;transition:stroke-dashoffset .3s cubic-bezier(.45,0,.25,1)}
+.lead g.show .line{stroke-dashoffset:0;transition:stroke-dashoffset .3s cubic-bezier(.45,0,.25,1) .25s}
+/* the line ends in a hand-drawn arrowhead at the text, two short strokes added once the line is done */
+.lead g.show .head{stroke-dashoffset:0;transition:stroke-dashoffset .15s ease-out .55s}
+.lead g.gone path{opacity:0;transition:opacity .4s}
+.lead g.gone path{stroke-dashoffset:0}
+.callout{position:absolute;left:0;top:0;width:220px;font-size:16px;line-height:1.45;color:var(--ink);pointer-events:none;opacity:0;translate:0 4px;transition:opacity .4s, translate .4s}
+.callout.show{opacity:1;translate:0 0;transition-delay:.55s}
+.callout .par{display:block;color:var(--o-ink);font-size:15px}
+.callout .by{display:block;margin:4px 0 2px;font-size:13px;font-weight:600;color:var(--s)}
+/* fan view: one broad O*NET task under the Venn, with a pen line out to each TaskNet statement that refines it */
+.fan-card{position:absolute;left:0;top:0;font-size:15.5px;line-height:1.45;color:var(--ink);pointer-events:none;opacity:0;translate:0 4px;transition:opacity .4s, translate .4s}
+.fan-card.show{opacity:1;translate:0 0;transition-delay:.6s}
+.fan-card .k{display:block;font-size:14px;color:var(--muted)}
+.fan-card .p{display:block;color:var(--o-ink);font-weight:500}
+.fan-card .by{display:block;margin:6px 0 2px;font-size:13px;font-weight:600;color:var(--s)}
+.fan-card ul{margin:0;padding-left:16px;color:var(--s-ink);font-size:14.5px}
+.fan-card li{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.callout cite{display:block;margin-top:4px;font-style:normal;font-size:14px;color:var(--muted)}
+
+/* task panel: no box, just a hairline above; statement on the left, ratings on the right */
+.m-key{grid-column:1/-1;justify-self:start;margin-top:4px;padding:0;border:0;background:none;font:inherit;font-size:19px;font-weight:600;color:var(--ink);cursor:pointer;border-bottom:1.5px solid currentColor}
+.m-key:hover{color:var(--s)}
+.detail{--bar:var(--s); --dot:var(--s);
+  width:100%;min-height:200px;border-top:1px solid var(--rule);padding-top:24px;display:grid;grid-template-columns:minmax(0,1fr);gap:32px;align-content:start}
+.detail.o{--bar:var(--o); --dot:var(--o)}
+.detail.empty{align-content:start}
+.d-main{display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:20px;min-height:0}
+.d-meta{display:flex;align-items:center;gap:8px;font-size:20px;color:var(--muted)}
+.d-meta i{width:10px;height:10px;border-radius:50%;background:var(--dot);flex:none}
+.detail .d-text{margin:0;max-width:none;min-height:0;font-size:26px;font-weight:500;line-height:34px;letter-spacing:-.01em;text-wrap:pretty}
+.detail .d-hint{margin:0;font-size:18.5px;color:var(--muted)}
+.links{list-style:none;margin:0;padding:0;overflow:visible;align-content:start}   /* a fixed box: the ratings below stay put from task to task */
+.links li+li{border-top:1px solid var(--rule)}
+.links button{all:unset;box-sizing:border-box;display:grid;grid-template-columns:8px 1fr;gap:4px 10px;width:100%;padding:9px 0;cursor:pointer;font-size:20px;line-height:1.45;color:var(--muted)}
+.links button i{width:6px;height:6px;border-radius:50%;margin-top:7px}
+.links button em{font-style:normal;color:var(--ink);opacity:.45;font-size:inherit;margin-right:6px}
+.links button:hover,.links button:focus-visible{color:var(--ink)}
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:20px 44px;align-content:start}
+.m{display:grid;grid-template-columns:1fr auto;gap:10px 8px;align-items:baseline;align-content:start}   /* bars sit at the same height in both columns */
+.m-l{font-size:19px;font-weight:400;color:var(--muted)}   /* the name recedes; the value carries the weight */
+.m-v{font-size:19px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.m-steps{grid-column:1 / -1;display:grid;gap:3px;height:4px}
+.m-steps i{height:4px;border-radius:2px;background:var(--rule)} .m-steps i.on{background:var(--bar)}   /* same weight and colours as the bars */
+.m-steps i.part{background:linear-gradient(90deg,var(--bar) var(--p),var(--rule) var(--p))}
+.m-ends{grid-column:1 / -1;display:flex;justify-content:space-between;margin-top:-2px;font-size:15px;color:var(--muted)}
+.m-bar{grid-column:1 / -1;height:4px;background:var(--rule);border-radius:2px}
+.m-bar i{display:block;height:100%;border-radius:2px;background:var(--bar)}
+
+/* ---- layout: the task beside the Venn, its ratings as a full-width band of cards underneath ---- */
+@media (min-width:901px){
+  .story,.step.explore,.detail{display:contents}
+  .scrolly{grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);grid-template-rows:auto 1fr auto;gap:0 64px}
+  .step.explore > p{grid-column:1;grid-row:1;padding-top:64px;margin-bottom:20px}
+  .d-main{grid-column:1;grid-row:2;align-content:start;padding-top:20px;border-top:1px solid var(--rule)}
+  .stage-wrap{grid-column:2;grid-row:1 / 3;align-self:start}
+  .stage{height:620px;padding-top:110px}
+  .metrics{grid-column:1 / -1;grid-row:3;grid-template-columns:repeat(4,minmax(0,1fr));gap:40px 56px;margin-top:32px;padding-top:32px;border-top:1px solid var(--rule)}
+  /* read in the ratings' own groups: is it part of the job, how the work happens, expertise, can it be checked */
+  .metrics > :nth-child(1){order:1} .metrics > :nth-child(2){order:2} .metrics > :nth-child(3){order:3} .metrics > :nth-child(5){order:4}
+  .metrics > :nth-child(7){order:5} .metrics > :nth-child(4){order:6} .metrics > :nth-child(6){order:7} .metrics > :nth-child(8){order:8} .metrics > :nth-child(9){order:9}
+}
+/* the ratings sit in a plain band: no card around each */
+.metrics .m-key{margin-top:4px}
+.metrics > .m-note{order:9} .metrics > .m-key{order:10}
+.detail .m-note{grid-column:1/-1;max-width:none;margin:0;max-width:none;font-size:19px;line-height:1.5;color:var(--muted)}
+@media (max-width:900px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 28px}}
+@media (max-width:560px){.metrics{grid-template-columns:minmax(0,1fr)}}
+
+
+
+/* ---- links: grouped under one heading per relation ---- */
+.links{display:grid;gap:18px;height:auto;overflow:visible}
+.lg{display:grid;gap:8px}
+.detail .lg-h{margin:0;max-width:none;font-size:20px;font-weight:400;color:var(--muted)}   /* sentence case: it reads as a phrase */
+.lg ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.lg li+li{border-top:0}
+.links .lg button{grid-template-columns:1fr;padding:0;color:var(--ink);font-size:19px;line-height:1.45}
+.links .lg button i{display:none}
+.links .lg button:not([disabled]):hover span{text-decoration:underline;text-decoration-color:var(--rule);text-underline-offset:3px}
+/* each linked task on a pale block of the other inventory's colour */
+.lg ul{gap:10px} .lg li{padding:12px 16px;border-radius:8px;background:var(--o-tint)}
+.detail.o .lg li{background:var(--s-tint)}
+</style>
+</head>
+<body class="loading">
+<!-- hand-drawn look: graph paper behind the page, and marker filters (grain that lets the paper show through, plus a slight wobble) for coloured marks -->
+<svg class="paper" aria-hidden="true" hidden>
+  <defs>
+    <pattern id="paper-grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 .5H.5V24" fill="none" stroke="#E6E6EB" stroke-width="1"/></pattern>
+    <filter id="mk-rule" x="-2%" y="-2%" width="104%" height="104%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency=".72" numOctaves="2" seed="5" result="grain"/><feColorMatrix in="grain" type="luminanceToAlpha" result="ga"/><feComposite in="SourceGraphic" in2="ga" operator="arithmetic" k2="1" k3="-.12" result="inked"/><feTurbulence type="fractalNoise" baseFrequency=".05" numOctaves="2" seed="3" result="warp"/><feDisplacementMap in="inked" in2="warp" scale="1.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+    <filter id="mk-marker" x="-8%" y="-8%" width="116%" height="116%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency=".55" numOctaves="2" seed="7" result="grain"/><feColorMatrix in="grain" type="luminanceToAlpha" result="ga"/><feComposite in="SourceGraphic" in2="ga" operator="arithmetic" k2="1" k3="-.16" result="inked"/><feTurbulence type="fractalNoise" baseFrequency=".11" numOctaves="2" seed="11" result="warp"/><feDisplacementMap in="inked" in2="warp" scale="2.6" xChannelSelector="R" yChannelSelector="G"/></filter>
+    <filter id="mk-dry" x="-8%" y="-30%" width="116%" height="160%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="4" result="grain"/><feColorMatrix in="grain" type="luminanceToAlpha" result="ga"/><feComposite in="SourceGraphic" in2="ga" operator="arithmetic" k2="1" k3="-.25" result="inked"/><feTurbulence type="fractalNoise" baseFrequency=".18" numOctaves="2" seed="9" result="warp"/><feDisplacementMap in="inked" in2="warp" scale="1.8" xChannelSelector="R" yChannelSelector="G"/></filter>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#paper-grid)" filter="url(#mk-rule)"/>
+</svg>
+<main class="scrolly">
+<div class="stage-wrap">
+<div class="stage" id="stage">
+  <canvas id="venn" tabindex="0" aria-label="Venn diagram of task statements. Left circle TaskNet, right circle O*NET. The overlap holds TaskNet statements linked to an O*NET task. In the explore section, arrow keys step through statements and Escape clears."></canvas>
+  <div class="region off" id="reg-L"><b></b><span>New</span></div>
+  <div class="region off" id="reg-X"><b></b><span>Overlap</span></div>
+  <div class="region off" id="reg-R"><b></b><span>Missing</span></div>
+  <div class="region off" id="reg-O"><b></b><span>O*NET tasks</span></div>
+  <div class="region off" id="reg-S"><b></b><span>TaskNet statements</span></div>
+  <svg class="lead" id="lead" aria-hidden="true"></svg>
+  <div id="callouts" aria-live="polite"></div>
+  <div class="ctas" id="ctas" hidden></div>
+</div>
+</div>
+<div class="story" id="story">
+  <section class="step explore" data-step="explore">
+    <p><span class="on-hover">Hover a dot to read it and its ratings. Click to pin it.</span><span class="on-touch">Tap a dot to read it and its ratings.</span></p>
+    <div class="chips" id="chips" role="group" aria-label="Filter by occupation" style="display:none"></div>   <!-- the dashboard below shows each occupation -->
+    <aside class="detail" id="detail" aria-live="polite"></aside>
+  </section>
+</div>
+</main>
+
+<script type="text/csv" id="embedded-data">
+id,inventory,occupation,soc,statement,relevance,importance,frequency,duration,training_svp,articulability,verifiability,top_worker_gap,eloundou_beta,rl_feasibility,chat_use_quartile,postings_quartile,themes
+S-SWD-01,TaskNet,Software Developers,15-1252.00,"Research new technologies, design patterns, and implementation approaches to inform planned software work.",0.96,4.39,3.49,5.82,6.93,0.67,0.78,0.67,1.0,74,2,4,
+S-SWD-02,TaskNet,Software Developers,15-1252.00,"Estimate implementation effort, technical risks, and timelines for planned features and projects.",0.45,2.37,4.77,5.51,5.87,0.77,0.92,0.47,1.0,85,1,1,
+S-SWD-03,TaskNet,Software Developers,15-1252.00,"Gather, clarify, and document business requirements, acceptance criteria, and project scope with clients, product owners, and other stakeholders.",0.9,3.48,3.76,5.09,6.04,0.89,0.79,0.5,0.5,80,1,3,
+S-SWD-04,TaskNet,Software Developers,15-1252.00,"Advise engineers, product managers, and technical leaders on design choices, implementation approaches, and engineering trade-offs before or during development.",0.91,4.14,3.5,3.56,5.73,0.75,0.77,0.66,1.0,87,3,4,
+S-SWD-05,TaskNet,Software Developers,15-1252.00,"Review technical designs, implementation approaches, and solution options with engineers and other stakeholders before development.",0.94,4.27,3.97,4.06,5.73,0.94,0.96,0.48,1.0,86,3,3,oversight_qa
+S-SWD-06,TaskNet,Software Developers,15-1252.00,"Present proposed designs, plans, acceptance criteria, or requests for comment to managers, clients, or other teams for approval before development proceeds.",0.92,3.76,5.58,5.32,6.32,0.8,0.9,0.74,1.0,86,2,3,coordination
+S-SWD-07,TaskNet,Software Developers,15-1252.00,Decompose approved features and product requirements into technical implementation tasks for development teams.,0.92,4.41,4.46,4.45,5.67,0.56,0.38,0.74,1.0,74,2,3,
+S-SWD-08,TaskNet,Software Developers,15-1252.00,"Design backend software architecture, data structures, or application programming interfaces for new features and systems.",0.97,4.22,3.33,2.95,6.62,0.63,0.78,0.62,1.0,61,4,4,
+S-SWD-09,TaskNet,Software Developers,15-1252.00,"Optimize application code and systems to reduce latency, resource use, and operating costs.",0.94,4.17,5.95,5.11,5.59,0.82,0.78,0.54,1.0,86,3,3,
+S-SWD-10,TaskNet,Software Developers,15-1252.00,"Refactor code to remove duplication, consolidate shared logic, and separate concerns across the codebase.",0.88,3.56,2.82,2.59,6.59,0.56,0.7,0.71,1.0,63,3,2,
+S-SWD-11,TaskNet,Software Developers,15-1252.00,"Write application code for new features, backend services, or application programming interfaces.",0.95,4.07,3.36,2.75,6.63,0.75,0.6,0.44,1.0,79,3,3,
+S-SWD-12,TaskNet,Software Developers,15-1252.00,"Define test coverage, test parameters, and manual test scenarios for software releases in collaboration with quality assurance teams.",0.94,3.34,4.73,4.84,5.62,0.67,0.52,0.58,0.5,60,1,1,
+S-SWD-13,TaskNet,Software Developers,15-1252.00,"Test software builds against functional, integration, accessibility, or acceptance criteria across development, staging, or production environments.",0.91,4.8,4.69,4.88,7.05,0.79,0.89,0.64,1.0,92,3,4,
+S-SWD-14,TaskNet,Software Developers,15-1252.00,"Write automated tests for new features, backend services, or existing code paths.",0.42,3.13,4.13,3.72,6.34,0.87,0.88,0.61,1.0,86,2,2,
+S-SWD-15,TaskNet,Software Developers,15-1252.00,"Fix software bugs in application code, game features, or production systems.",0.96,4.48,3.94,4.7,6.11,0.79,0.71,0.67,1.0,68,1,4,new_technology
+S-SWD-16,TaskNet,Software Developers,15-1252.00,"Migrate or upgrade existing applications, platforms, and architecture to current technology standards.",0.95,4.5,4.63,2.83,6.18,0.63,0.6,0.8,1.0,74,3,4,
+S-SWD-17,TaskNet,Software Developers,15-1252.00,"Monitor production systems, logs, and performance metrics after deployment to detect errors, regressions, and reliability issues.",0.87,4.43,4.65,3.98,6.39,0.99,0.92,0.39,1.0,90,4,4,oversight_qa;new_technology
+S-SWD-18,TaskNet,Software Developers,15-1252.00,"Document experiment results and performance findings for product partners, engineers, and other stakeholders.",0.36,2.93,2.98,3.38,6.72,0.67,0.76,0.43,0.5,67,1,2,
+S-SWD-19,TaskNet,Software Developers,15-1252.00,"Report progress, risks, and blockers to team members, managers, and other stakeholders in stand-up meetings or written updates.",0.97,3.57,5.42,4.45,6.39,0.64,0.77,0.7,0.5,72,4,3,coordination;oversight_qa
+S-SWD-20,TaskNet,Software Developers,15-1252.00,Evaluate team members’ performance using code quantity and quality metrics.,0.89,3.77,4.12,3.38,6.89,0.46,0.69,0.52,1.0,59,2,1,
+S-SWD-21,TaskNet,Software Developers,15-1252.00,"Mentor junior developers and engineers on coding practices, debugging, and technical problem-solving.",0.91,4.17,5.1,5.28,7.82,0.78,0.72,0.68,1.0,81,4,4,
+S-SWD-22,TaskNet,Software Developers,15-1252.00,"Approve software releases after reviewing test results, launch checklists, integration health, and rollback readiness.",0.94,4.13,2.98,4.35,7.4,0.87,0.87,0.69,0.5,59,2,4,oversight_qa;new_technology
+S-SWD-23,TaskNet,Software Developers,15-1252.00,Build and package software release images for deployment.,0.92,4.62,4.38,6.19,5.55,0.64,0.72,0.67,1.0,74,3,3,new_technology
+S-SWD-24,TaskNet,Software Developers,15-1252.00,"Build and troubleshoot continuous integration and continuous delivery pipelines, using source control workflows and automation scripts, to manage software version releases.",0.93,3.72,3.21,5.59,5.76,0.83,0.95,0.79,0.0,0,1,2,new_technology
+S-SWD-25,TaskNet,Software Developers,15-1252.00,"Build data ingestion and processing pipelines to move, clean, chunk, and index content for search and retrieval systems.",0.92,4.08,4.25,4.02,7.01,0.73,0.75,0.51,0.0,0,1,1,new_technology
+S-SWD-26,TaskNet,Software Developers,15-1252.00,"Define evaluation datasets, acceptance criteria, and development rubrics for artificial intelligence model tasks.",0.5,2.71,3.83,5.18,6.88,0.38,0.67,0.6,1.0,70,4,1,oversight_qa;new_technology
+S-SWD-27,TaskNet,Software Developers,15-1252.00,Deploy application changes to staging or production environments.,0.5,2.72,3.12,5.04,6.75,0.7,0.6,0.76,1.0,59,2,1,new_technology
+S-SWD-28,TaskNet,Software Developers,15-1252.00,"Design prompts, retrieval logic, and context pipelines for artificial intelligence applications based on feedback and evaluation.",0.92,3.37,4.47,3.19,6.05,0.46,0.76,0.39,0.5,0,3,1,new_technology
+S-SWD-29,TaskNet,Software Developers,15-1252.00,Diagnose software bugs and production incidents to identify root causes and estimate fix scope.,0.88,3.94,4.69,4.99,7.07,0.49,0.6,0.74,1.0,69,3,2,oversight_qa
+S-SWD-30,TaskNet,Software Developers,15-1252.00,"Document bug reports, incident postmortems, model failure cases, and internal records of technical decisions and follow-up work.",0.95,3.78,3.08,4.05,7.3,0.6,0.82,0.54,1.0,69,4,3,oversight_qa;new_technology
+S-SWD-31,TaskNet,Software Developers,15-1252.00,Draft and revise pull requests for code changes based on review feedback.,0.52,2.71,2.38,6.15,7.36,0.61,0.78,0.6,0.5,0,1,1,oversight_qa;new_technology
+S-SWD-32,TaskNet,Software Developers,15-1252.00,"Escalate unresolved engineering blockers, approval gaps, and recurring model failure risks to project leads or partner teams.",0.9,4.11,3.18,4.37,7.75,0.68,0.57,0.73,1.0,56,2,2,coordination;oversight_qa;new_technology
+S-SWD-33,TaskNet,Software Developers,15-1252.00,"Evaluate artificial intelligence model outputs for instruction following, correctness, and failure patterns across prompt or model variants.",0.43,3.33,3.62,4.26,6.92,0.52,0.47,0.68,1.0,71,2,1,oversight_qa;new_technology
+S-SWD-34,TaskNet,Software Developers,15-1252.00,"Gather user feedback on bugs, feature requests, and usage patterns to guide software fixes and enhancements.",0.39,3.22,4.06,7.27,6.51,0.5,0.63,0.52,0.0,0,1,1,new_technology
+S-SWD-35,TaskNet,Software Developers,15-1252.00,Hand off completed features or production changes to quality assurance or production support teams.,0.63,3.14,4.64,3.41,6.57,0.46,0.52,0.81,0.5,51,2,3,coordination
+S-SWD-36,TaskNet,Software Developers,15-1252.00,Integrate external services such as language models into backend systems and artificial intelligence agent workflows.,0.93,3.7,3.97,4.71,6.7,0.72,0.75,0.55,1.0,69,3,3,new_technology
+S-SWD-37,TaskNet,Software Developers,15-1252.00,Merge approved code changes into the shared codebase.,0.63,3.19,5.05,4.01,6.65,0.83,0.81,0.39,1.0,67,2,1,oversight_qa;new_technology
+S-SWD-38,TaskNet,Software Developers,15-1252.00,"Plan and prioritize software development work, including sprint goals, backlog items, bug fixes, and quarterly projects.",0.89,3.89,2.54,3.51,5.55,0.71,0.81,0.28,1.0,86,4,4,coordination
+S-SWD-39,TaskNet,Software Developers,15-1252.00,"Plan and schedule production releases, including deployment timelines and sprint-based release dates.",0.85,3.59,3.26,3.69,7.24,0.71,0.9,0.64,1.0,70,4,2,coordination
+S-SWD-40,TaskNet,Software Developers,15-1252.00,"Present completed work, feature ideas, and process plans to product owners, leadership, or other teams.",0.96,3.34,4.39,4.98,7.49,0.88,0.88,0.52,1.0,59,3,1,coordination
+S-SWD-41,TaskNet,Software Developers,15-1252.00,"Provision and configure application environments, developer workspaces, cloud storage, and messaging queues.",0.38,3.2,3.58,4.1,7.19,0.59,0.64,0.81,1.0,73,4,1,new_technology
+S-SWD-42,TaskNet,Software Developers,15-1252.00,"Review code changes for correctness, readability, security, or maintainability, and provide feedback to other developers.",0.96,4.27,5.51,4.38,6.05,0.75,0.82,0.62,0.5,0,3,2,oversight_qa
+S-SWD-43,TaskNet,Software Developers,15-1252.00,"Triage, troubleshoot, and route production incidents and service issues to restore systems and resolve customer-impacting failures.",0.94,4.21,4.29,3.75,7.17,0.89,0.61,0.56,0.5,70,1,1,oversight_qa
+S-SWD-44,TaskNet,Software Developers,15-1252.00,"Write and revise technical design documents, such as architecture diagrams, decision records, and implementation plans.",0.97,3.68,3.3,2.24,7.64,0.73,0.77,0.74,0.5,62,3,2,oversight_qa
+O-SWD-01,O*NET,Software Developers,15-1252.00,"Analyze information to determine, recommend, and plan installation of a new system or modification of an existing system.",0.95,3.61,3.54,,,,,,0.0,30,1,2,
+O-SWD-02,O*NET,Software Developers,15-1252.00,Analyze user needs and software requirements to determine feasibility of design within time and cost constraints.,0.9,4.08,4.11,,,,,,1.0,65,2,2,
+O-SWD-03,O*NET,Software Developers,15-1252.00,"Confer with systems analysts, engineers, programmers and others to design systems and to obtain information on project limitations and capabilities, performance requirements and interfaces.",0.93,3.75,4.31,,,,,,1.0,60,4,2,
+O-SWD-04,O*NET,Software Developers,15-1252.00,"Consult with customers or other departments on project status, proposals, or technical issues, such as software system design or maintenance.",0.91,3.37,3.65,,,,,,1.0,57,1,2,
+O-SWD-05,O*NET,Software Developers,15-1252.00,"Design, develop and modify software systems, using scientific analysis and mathematical models to predict and measure outcomes and consequences of design.",0.68,3.56,4,,,,,,1.0,72,4,4,
+O-SWD-06,O*NET,Software Developers,15-1252.00,"Develop or direct software system testing or validation procedures, programming, or documentation.",0.92,3.9,4.18,,,,,,0.0,0,1,3,
+O-SWD-07,O*NET,Software Developers,15-1252.00,"Modify existing software to correct errors, adapt it to new hardware, or upgrade interfaces and improve performance.",0.9,3.74,4.52,,,,,,0.5,63,1,1,
+O-SWD-08,O*NET,Software Developers,15-1252.00,Monitor functioning of equipment to ensure system operates in conformance with specifications.,0.48,4.12,4.51,,,,,,1.0,57,4,2,
+O-SWD-09,O*NET,Software Developers,15-1252.00,"Prepare reports or correspondence concerning project specifications, activities, or status.",0.73,3.68,3.73,,,,,,1.0,51,4,4,
+O-SWD-10,O*NET,Software Developers,15-1252.00,"Supervise the work of programmers, technologists and technicians and other engineering and scientific personnel.",0.63,3.51,4.14,,,,,,0.5,42,2,2,
+O-SWD-11,O*NET,Software Developers,15-1252.00,"Store, retrieve, and manipulate data for analysis of system capabilities and requirements.",0.82,3.59,4.3,,,,,,1.0,56,3,4,
+O-SWD-12,O*NET,Software Developers,15-1252.00,Confer with data processing or project managers to obtain information on limitations or capabilities for data processing projects.,0.81,3.32,3.56,,,,,,1.0,66,4,4,
+O-SWD-13,O*NET,Software Developers,15-1252.00,Coordinate installation of software system.,0.57,3.75,3.4,,,,,,1.0,71,4,3,
+O-SWD-14,O*NET,Software Developers,15-1252.00,Determine system performance standards.,0.89,3.53,3.83,,,,,,0.5,58,2,3,
+O-SWD-15,O*NET,Software Developers,15-1252.00,"Obtain and evaluate information on factors such as reporting formats required, costs, or security needs to determine hardware configuration.",0.63,3.07,2.92,,,,,,0.0,27,1,4,
+O-SWD-16,O*NET,Software Developers,15-1252.00,"Supervise and assign work to programmers, designers, technologists, technicians, or other engineering or scientific personnel.",0.57,3.13,3.58,,,,,,1.0,75,4,4,
+O-SWD-17,O*NET,Software Developers,15-1252.00,Train users to use new or modified equipment.,0.52,2.91,3.04,,,,,,0.5,56,2,3,
+S-LAW-01,TaskNet,Lawyers,23-1011.00,"Advise clients, executives, and internal teams on legal options, risks, and recommended courses of action.",0.82,3.82,4.17,4.5,7.24,0.79,0.9,0.53,0.5,57,3,2,
+S-LAW-02,TaskNet,Lawyers,23-1011.00,"Analyze case facts, legal authorities, and records to assess viability, risks, damages, and litigation or settlement strategy.",0.92,3.52,4.44,4.25,7.01,0.55,0.7,0.71,1.0,86,4,4,
+S-LAW-03,TaskNet,Lawyers,23-1011.00,"Draft legal memoranda, opinion letters, summaries, and plain-language updates to explain legal analysis, case outcomes, or regulatory developments.",0.91,4.16,4.88,6.04,7.19,0.49,0.51,0.59,0.0,48,3,3,
+S-LAW-04,TaskNet,Lawyers,23-1011.00,"Present legal arguments, evidence, and witness testimony at trials, hearings, and appeals before judges, juries, or administrative authorities.",0.93,3.76,4.28,7.18,7.79,0.55,0.65,0.57,1.0,49,4,1,
+S-LAW-05,TaskNet,Lawyers,23-1011.00,"Prepare arguments, exhibits, witnesses, and case materials for trials, hearings, depositions, and mediation sessions.",0.87,3.96,4.57,4.52,8.03,0.58,0.63,0.91,0.0,27,1,4,
+S-LAW-06,TaskNet,Lawyers,23-1011.00,"Interview clients and other parties to gather facts, documents, and evidence for new and active matters.",0.92,4.21,4.69,4.24,8.41,0.69,0.75,0.74,0.5,51,1,2,
+S-LAW-07,TaskNet,Lawyers,23-1011.00,"Communicate with courts, agencies, opposing counsel, and other parties on client matters to clear procedural obstacles and resolve delays.",0.92,3.92,5.12,4.45,6.59,0.78,0.56,0.46,1.0,59,1,4,
+S-LAW-08,TaskNet,Lawyers,23-1011.00,"Draft and file motions, briefs, pleadings, complaints, and related court filings for active cases.",0.91,3.31,5.22,3.7,6.98,0.48,0.85,0.6,1.0,85,3,2,
+S-LAW-09,TaskNet,Lawyers,23-1011.00,"Review potential cases and referrals for legal merit and fit with the firm’s practice to decide whether to accept, refer to co-counsel, or return them to the client.",0.91,3.72,4.36,4.88,7.44,0.43,0.75,0.64,0.0,49,1,3,
+S-LAW-10,TaskNet,Lawyers,23-1011.00,"Monitor developments in legislation, regulation, and judicial decisions to stay current on changes affecting legal practice.",0.89,3.38,3.02,5.01,7.13,0.65,0.74,0.56,0.0,48,1,2,teaching_pd
+S-LAW-11,TaskNet,Lawyers,23-1011.00,"Research case law, statutes, regulations, and rules to support litigation, transactional, and regulatory matters.",0.91,4.22,3.87,3.79,8.2,0.47,0.4,0.59,0.5,25,3,4,
+S-LAW-12,TaskNet,Lawyers,23-1011.00,"Negotiate settlements, payment arrangements, or other out-of-court agreements with opposing attorneys, insurance adjusters, regulators, or other parties on behalf of clients.",0.88,4.29,4.09,4.61,6.49,0.6,0.84,0.91,1.0,63,2,4,
+S-LAW-13,TaskNet,Lawyers,23-1011.00,Review proposed settlement terms with clients and obtain their approval before finalizing agreements.,0.89,4.09,3.65,4.87,6.74,0.7,0.83,0.67,0.5,66,3,3,
+S-LAW-14,TaskNet,Lawyers,23-1011.00,"Consult colleagues, co-counsel, and outside experts on legal analysis, case strategy, review methods, or specialized issues.",0.94,3.13,3.17,4.52,7.18,0.39,0.68,0.69,1.0,68,4,2,coordination
+S-LAW-15,TaskNet,Lawyers,23-1011.00,Supervise and train paralegals or legal assistants by assigning and reviewing casework tasks.,0.84,4.19,2.54,4.85,7.46,0.56,0.73,0.73,1.0,75,4,3,teaching_pd
+S-LAW-16,TaskNet,Lawyers,23-1011.00,Check legal citations against source documents and review executed court-required forms for accuracy.,0.94,3.46,2.87,3.81,8.44,0.96,0.97,0.6,0.5,52,2,2,
+S-LAW-17,TaskNet,Lawyers,23-1011.00,"Draft and revise statutes, regulations, court policies, and organizational policy memoranda to reflect legal or operational changes.",0.91,4.35,4.06,4.31,6.37,0.37,0.63,0.72,0.0,50,2,3,
+S-LAW-18,TaskNet,Lawyers,23-1011.00,"Review proposed legislation, draft regulations, and statutory language from partner organizations to identify required revisions or agency response.",0.9,4.8,2.74,3.07,7.12,0.61,0.76,0.73,1.0,85,3,4,oversight_qa
+S-LAW-19,TaskNet,Lawyers,23-1011.00,"Draft written discovery requests, such as interrogatories, requests for admissions, or requests for production.",0.85,4.24,4.59,3.94,7.87,0.46,0.56,0.75,0.0,42,2,1,
+S-LAW-20,TaskNet,Lawyers,23-1011.00,"Review and revise legal drafts and AI-generated legal content for accuracy, compliance, and supporting authority before filing or circulation.",0.91,4.31,4.18,5.45,6.72,0.38,0.47,0.61,1.0,47,4,4,
+S-LAW-21,TaskNet,Lawyers,23-1011.00,"Draft legal documents for client matters, such as contracts, estate planning instruments, corporate governance records, or real estate agreements.",0.93,4.05,4.37,3.09,5.94,0.32,0.68,0.48,1.0,75,2,4,
+S-LAW-22,TaskNet,Lawyers,23-1011.00,Negotiate contract terms and mark up agreements to reflect legal and business positions.,0.97,4.6,4.75,3.56,6.66,0.47,0.51,0.69,0.5,50,4,4,
+S-LAW-23,TaskNet,Lawyers,23-1011.00,"Approve staff-drafted financial, operational, and compliance reports and recurring filings before they are submitted to oversight agencies.",0.95,3.41,4.54,3.01,6.47,0.64,0.38,0.83,0.5,53,4,3,oversight_qa
+S-LAW-24,TaskNet,Lawyers,23-1011.00,Complete continuing legal education and professional development training.,0.92,3.42,3.05,3.89,7.93,0.52,0.78,0.67,1.0,61,4,1,teaching_pd
+S-LAW-25,TaskNet,Lawyers,23-1011.00,"Deliver legal training to prosecutors, law enforcement officers, and non-legal audiences on investigative procedures, legal changes, and compliance topics.",0.9,3.45,4.35,4.95,8.3,0.49,0.69,0.62,0.0,0,2,1,teaching_pd
+S-LAW-26,TaskNet,Lawyers,23-1011.00,"Develop legal templates, precedents, and playbooks from past contracts and current legal or business needs.",0.49,2.68,3.15,4.85,6.62,0.32,0.56,0.77,0.5,47,3,1,
+S-LAW-27,TaskNet,Lawyers,23-1011.00,Exchange and produce documents with opposing counsel during pretrial discovery.,0.56,3.21,5.09,4.84,8.7,0.64,0.62,0.75,0.0,28,1,2,coordination
+S-LAW-28,TaskNet,Lawyers,23-1011.00,"Prepare and submit document packets, written responses, and corrective action plans in response to government examinations and audits.",0.94,3.78,4.83,3.73,6.71,0.34,0.7,0.6,0.0,0,2,1,
+S-LAW-29,TaskNet,Lawyers,23-1011.00,Prepare and take depositions of fact and expert witnesses to develop the case record.,0.91,3.9,4.2,5.54,7.86,0.49,0.79,0.65,1.0,64,4,1,
+S-LAW-30,TaskNet,Lawyers,23-1011.00,"Refer clients to accountants, other legal organizations, or external service providers when their needs fall outside the firm’s scope.",0.92,4.25,3.83,2.58,8.52,0.58,0.61,0.74,0.0,33,2,2,coordination
+S-LAW-31,TaskNet,Lawyers,23-1011.00,"Review and respond to discovery requests served on clients, including document review for production.",0.56,3.34,4.37,3.31,6.88,0.55,0.51,0.49,1.0,41,4,1,oversight_qa
+S-LAW-32,TaskNet,Lawyers,23-1011.00,"Update clients on case status, procedural next steps, and hearing or arbitration outcomes.",0.91,3.57,3.33,4.06,7.77,0.59,0.62,0.65,1.0,57,4,1,coordination
+O-LAW-01,O*NET,Lawyers,23-1011.00,"Advise clients concerning business transactions, claim liability, advisability of prosecuting or defending lawsuits, or legal rights and obligations.",0.82,4.27,4.49,,,,,,0.5,75,2,2,
+O-LAW-02,O*NET,Lawyers,23-1011.00,"Analyze the probable outcomes of cases, using knowledge of legal precedents.",0.97,4.41,4.82,,,,,,1.0,50,3,2,
+O-LAW-03,O*NET,Lawyers,23-1011.00,Present and summarize cases to judges and juries.,0.66,4.36,3.62,,,,,,0.5,58,3,3,
+O-LAW-04,O*NET,Lawyers,23-1011.00,Evaluate findings and develop strategies and arguments in preparation for presentation of cases.,0.74,4.31,3.88,,,,,,0.0,31,1,4,
+O-LAW-05,O*NET,Lawyers,23-1011.00,Gather evidence to formulate defense or to initiate legal actions by such means as interviewing clients and witnesses to ascertain the facts of a case.,0.82,4.4,4.34,,,,,,0.5,48,2,1,
+O-LAW-06,O*NET,Lawyers,23-1011.00,Represent clients in court or before government agencies.,0.76,4.34,3.64,,,,,,0.0,59,1,3,
+O-LAW-07,O*NET,Lawyers,23-1011.00,Examine legal data to determine advisability of defending or prosecuting lawsuit.,0.87,4.21,4.13,,,,,,0.0,0,3,4,
+O-LAW-08,O*NET,Lawyers,23-1011.00,"Select jurors, argue motions, meet with judges, and question witnesses during the course of a trial.",0.63,4.34,2.73,,,,,,0.5,35,2,2,
+O-LAW-09,O*NET,Lawyers,23-1011.00,Present evidence to defend clients or prosecute defendants in criminal or civil litigation.,0.63,4.29,3.73,,,,,,0.0,39,1,3,
+O-LAW-10,O*NET,Lawyers,23-1011.00,"Study Constitution, statutes, decisions, regulations, and ordinances of quasi-judicial bodies to determine ramifications for cases.",0.87,4.04,4.1,,,,,,0.0,17,1,4,
+O-LAW-11,O*NET,Lawyers,23-1011.00,"Prepare legal briefs and opinions, and file appeals in state and federal courts of appeal.",0.62,3.86,2.71,,,,,,1.0,54,4,4,
+O-LAW-12,O*NET,Lawyers,23-1011.00,Negotiate settlements of civil disputes.,0.72,4.02,3.49,,,,,,1.0,67,2,3,
+O-LAW-13,O*NET,Lawyers,23-1011.00,Confer with colleagues with specialties in appropriate areas of legal issue to establish and verify bases for legal proceedings.,0.94,3.84,3.99,,,,,,1.0,50,4,2,
+O-LAW-14,O*NET,Lawyers,23-1011.00,Search for and examine public and other legal records to write opinions or establish ownership.,0.78,3.7,3.94,,,,,,0.0,0,2,2,
+O-LAW-15,O*NET,Lawyers,23-1011.00,Supervise legal assistants.,0.85,4.01,5.1,,,,,,0.5,52,3,3,
+O-LAW-16,O*NET,Lawyers,23-1011.00,Perform administrative and management functions related to the practice of law.,0.79,3.63,4.41,,,,,,0.0,40,1,3,
+O-LAW-17,O*NET,Lawyers,23-1011.00,"Help develop federal and state programs, draft and interpret laws and legislation, and establish enforcement procedures.",0.3,3.48,3.52,,,,,,0.0,0,2,3,
+O-LAW-18,O*NET,Lawyers,23-1011.00,"Prepare, draft, and review legal documents, such as wills, deeds, patent applications, mortgages, leases, and contracts.",0.87,4.18,4.47,,,,,,0.0,52,1,1,
+O-LAW-19,O*NET,Lawyers,23-1011.00,Negotiate contractual agreements.,0.84,3.94,3.82,,,,,,1.0,66,4,4,
+O-LAW-20,O*NET,Lawyers,23-1011.00,"Interpret laws, rulings and regulations for individuals and businesses.",0.98,4.54,4.91,,,,,,1.0,34,3,1,
+O-LAW-21,O*NET,Lawyers,23-1011.00,"Act as agent, trustee, guardian, or executor for businesses or individuals.",0.52,3.74,3.3,,,,,,0.0,48,1,2,
+O-LAW-22,O*NET,Lawyers,23-1011.00,Probate wills and represent and advise executors and administrators of estates.,0.55,3.9,3.6,,,,,,0.5,41,3,1,
+S-TCH-01,TaskNet,Elementary School Teachers,25-2021.00,"Establish and enforce classroom rules, routines, and behavior expectations.",0.39,3.6,3.88,3.45,6.42,0.78,0.78,0.57,1.0,48,4,1,
+S-TCH-02,TaskNet,Elementary School Teachers,25-2021.00,"Assign independent, small-group, or computer-based activities to students.",0.88,4.12,3.63,2.85,7.06,0.51,0.79,0.64,0.0,29,1,3,
+S-TCH-03,TaskNet,Elementary School Teachers,25-2021.00,Monitor student understanding during lessons and adjust instruction in real time.,0.96,3.91,5.81,2.53,6.47,0.55,0.79,0.67,1.0,57,3,1,
+S-TCH-04,TaskNet,Elementary School Teachers,25-2021.00,"Prepare students for standardized tests by reviewing content, practicing test questions, and discussing errors or areas of difficulty.",0.91,3.75,4.98,3.08,5.18,0.34,0.38,0.65,0.0,8,2,2,
+S-TCH-05,TaskNet,Elementary School Teachers,25-2021.00,"Teach social-emotional skills, such as recognizing and managing emotions, demonstrating empathy and kindness, and solving interpersonal problems.",0.97,4.9,6.15,2.34,5.9,0.61,0.53,0.64,0.0,11,1,2,
+S-TCH-06,TaskNet,Elementary School Teachers,25-2021.00,"Teach daily lessons across core subjects, introducing concepts, modeling skills, and guiding independent practice.",0.92,4.02,6.19,2.36,6.74,0.5,0.56,0.36,0.0,18,3,3,
+S-TCH-07,TaskNet,Elementary School Teachers,25-2021.00,Teach small-group and one-on-one lessons to reinforce or extend skills based on student need.,0.89,4.9,4.99,2.4,4.98,0.6,0.77,0.4,0.5,53,4,4,
+S-TCH-08,TaskNet,Elementary School Teachers,25-2021.00,"Collaborate with teachers, specialists, counselors, and administrators to coordinate student support plans, accommodations, and intervention services.",0.97,3.93,6.4,1.0,4.82,0.68,0.66,0.64,0.0,39,1,2,coordination
+S-TCH-09,TaskNet,Elementary School Teachers,25-2021.00,"Hold parent-teacher conferences to discuss student progress, strengths, and support needs with families.",0.92,4.24,4.73,2.59,5.68,0.41,0.58,0.54,0.0,18,1,4,coordination
+S-TCH-10,TaskNet,Elementary School Teachers,25-2021.00,"Produce materials, such as slide decks, graphic organizers, or manipulatives, for lessons and classroom activities.",0.35,2.54,3.3,2.75,6.52,0.46,0.72,0.43,1.0,37,4,1,
+S-TCH-11,TaskNet,Elementary School Teachers,25-2021.00,"Administer assessments, such as quizzes, exit tickets, or benchmark tests, to evaluate student learning and progress.",0.93,3.88,6.73,3.6,4.56,0.37,0.5,0.32,0.5,44,2,4,
+S-TCH-12,TaskNet,Elementary School Teachers,25-2021.00,Analyze assessment data to place students for targeted instruction and intervention.,0.85,3.94,4.1,3.5,8.16,0.42,0.66,0.82,1.0,56,3,3,
+S-TCH-13,TaskNet,Elementary School Teachers,25-2021.00,"Analyze student performance data, assessment results, and classroom work to identify learning gaps, track progress, and determine next instructional steps.",0.93,3.51,5.35,2.51,4.4,0.75,0.87,0.6,1.0,66,3,3,
+S-TCH-14,TaskNet,Elementary School Teachers,25-2021.00,"Maintain student records, such as attendance logs, gradebooks, report cards, and portfolios.",0.96,3.8,4.92,3.5,4.93,0.64,0.77,0.58,1.0,65,4,3,oversight_qa
+S-TCH-15,TaskNet,Elementary School Teachers,25-2021.00,"Set up, organize, and maintain the classroom environment, including displays and supplies.",0.91,3.48,5.14,2.97,6.58,0.63,0.68,0.8,0.0,0,1,4,
+S-TCH-16,TaskNet,Elementary School Teachers,25-2021.00,Monitor student health and refer those feeling unwell to the school nurse.,0.97,4.33,4.67,2.2,4.58,0.41,0.65,0.46,0.0,16,3,3,
+S-TCH-17,TaskNet,Elementary School Teachers,25-2021.00,"Grade student work and provide written or verbal feedback on strengths, progress, and next steps.",0.96,3.84,5.95,1.65,6.88,0.32,0.72,0.48,0.0,0,1,4,
+S-TCH-18,TaskNet,Elementary School Teachers,25-2021.00,"Design classroom assessments, such as quizzes, projects, or unit tests, aligned with intended learning outcomes and content standards.",0.94,3.12,4.36,2.07,4.81,0.5,0.93,0.58,0.0,67,1,1,
+S-TCH-19,TaskNet,Elementary School Teachers,25-2021.00,Plan intervention or enrichment lessons targeting prerequisite skills and unmastered content.,0.84,4.09,5.66,2.61,5.83,0.79,0.89,0.62,0.5,53,1,2,
+S-TCH-20,TaskNet,Elementary School Teachers,25-2021.00,"Meet with grade-level teammates to review student data, lesson pacing, and instructional plans.",0.85,3.72,6.09,1.44,6.01,0.6,0.77,0.76,0.0,47,1,3,coordination
+S-TCH-21,TaskNet,Elementary School Teachers,25-2021.00,Meet with grade-level teams to plan lessons and coordinate instruction.,0.94,4.36,4.26,3.36,5.62,0.6,0.65,0.69,0.5,34,4,2,
+S-TCH-22,TaskNet,Elementary School Teachers,25-2021.00,"Plan daily and weekly lessons across core subjects, aligned with state standards, pacing guides, and student assessment data.",0.56,3.25,5.49,2.76,6.42,0.56,0.73,0.55,0.5,51,3,1,
+S-TCH-23,TaskNet,Elementary School Teachers,25-2021.00,"Attend professional development sessions, trainings, and professional learning communities to improve teaching practice.",0.91,4.37,3.67,1.8,5.54,0.42,0.6,0.38,0.5,42,3,4,teaching_pd
+S-TCH-24,TaskNet,Elementary School Teachers,25-2021.00,"Coordinate field trips, performances, or other school activities and events such as open houses and family nights.",0.95,3.8,3.23,1.02,5.97,0.81,0.87,0.69,0.0,62,3,4,
+S-TCH-25,TaskNet,Elementary School Teachers,25-2021.00,"Acquire books and supplies for classroom use, sourcing from second-hand stores, family donations, or grants.",0.93,4.07,4.98,1.0,6.82,0.78,0.93,0.61,0.0,32,2,3,
+S-TCH-26,TaskNet,Elementary School Teachers,25-2021.00,"Supervise students in hallways, the cafeteria, recess, and bus lines throughout the school day.",0.85,3.5,3.96,2.67,5.72,0.84,0.7,0.56,0.0,0,1,3,oversight_qa
+S-TCH-27,TaskNet,Elementary School Teachers,25-2021.00,Prepare intervention history documentation and committee reports to support referral and special education review decisions.,0.95,3.99,4.99,3.87,4.84,0.92,0.86,0.58,0.5,60,4,4,
+S-TCH-28,TaskNet,Elementary School Teachers,25-2021.00,"Differentiate instruction with modified materials, accommodations, and structured language supports to meet varied student learning needs.",0.95,3.73,2.74,3.48,4.88,0.5,0.75,0.33,0.0,49,1,2,
+S-TCH-29,TaskNet,Elementary School Teachers,25-2021.00,Attend staff and faculty meetings and serve on school committees.,0.9,3.8,5.15,2.01,6.71,0.36,0.81,0.66,0.0,30,1,2,
+S-TCH-30,TaskNet,Elementary School Teachers,25-2021.00,Prepare and deliver presentations for faculty meetings or professional development sessions to support license renewal and ongoing educator training.,0.87,2.96,3.58,2.11,7.07,0.46,0.73,0.69,0.0,0,1,4,teaching_pd
+S-TCH-31,TaskNet,Elementary School Teachers,25-2021.00,"Administer basic first aid, such as bandages, and help students calm down after minor incidents.",0.94,3.61,4.89,3.42,7.22,0.69,0.92,0.7,0.0,0,3,3,
+S-TCH-32,TaskNet,Elementary School Teachers,25-2021.00,"Communicate with parents and families about student behavior and classroom updates through newsletters, emails, and calls.",0.91,4.23,4.07,4.05,6.86,0.42,0.43,0.57,1.0,22,4,2,coordination
+S-TCH-33,TaskNet,Elementary School Teachers,25-2021.00,"Complete teacher evaluation tasks, such as goal-setting reviews and student learning objective submissions, as required by school administration.",0.47,3.4,5.18,4.47,5.56,0.55,0.58,0.83,0.5,47,4,1,oversight_qa
+S-TCH-34,TaskNet,Elementary School Teachers,25-2021.00,Engage students and families in casual conversation during daily interactions or school events to develop relationships.,0.88,4.11,3.42,2.69,4.94,0.32,0.68,0.36,0.5,44,4,3,
+S-TCH-35,TaskNet,Elementary School Teachers,25-2021.00,Lead morning meetings to open the school day and build classroom community and routines.,0.93,4.77,3.51,1.83,4.46,0.48,0.62,0.54,1.0,51,4,2,
+S-TCH-36,TaskNet,Elementary School Teachers,25-2021.00,Mentor student teachers and less experienced colleagues by observing classrooms and attending model lessons.,0.57,3.56,4.48,3.79,4.76,0.56,0.84,0.7,1.0,62,3,1,teaching_pd
+S-TCH-37,TaskNet,Elementary School Teachers,25-2021.00,Prepare students for transitioning to the next grade by organizing end-of-year activities and closing out the classroom.,0.92,3.58,5.05,2.54,5.95,0.8,0.83,0.55,0.5,59,4,2,
+S-TCH-38,TaskNet,Elementary School Teachers,25-2021.00,"Read and respond to emails from colleagues and school leaders about school updates, student support, and classroom logistics.",0.88,4.02,4.52,3.95,5.47,0.35,0.59,0.41,1.0,33,3,1,coordination;new_technology
+S-TCH-39,TaskNet,Elementary School Teachers,25-2021.00,Refer students for learning disability testing or additional evaluation when assessment data show persistent learning difficulties.,0.95,3.95,4.63,3.32,5.33,0.58,0.72,0.53,0.0,41,2,2,coordination
+O-TCH-01,O*NET,Elementary School Teachers,25-2021.00,Establish and enforce rules for behavior and procedures for maintaining order among the students.,1,4.79,6.32,,,,,,0.0,0,1,1,
+O-TCH-02,O*NET,Elementary School Teachers,25-2021.00,"Instruct students individually and in groups, using teaching methods such as lectures, discussions, and demonstrations.",1,4.95,6.59,,,,,,0.0,37,2,3,
+O-TCH-03,O*NET,Elementary School Teachers,25-2021.00,"Confer with parents or guardians, teachers, counselors, and administrators to resolve students’ behavioral and academic problems.",1,4.52,3.99,,,,,,0.0,47,2,4,
+O-TCH-04,O*NET,Elementary School Teachers,25-2021.00,"Provide a variety of materials and resources for children to explore, manipulate, and use, both in learning activities and in imaginative play.",0.99,4.17,5.02,,,,,,0.0,29,4,1,
+O-TCH-05,O*NET,Elementary School Teachers,25-2021.00,"Administer standardized ability and achievement tests, and interpret results to determine student strengths and needs.",0.94,3.84,2.6,,,,,,0.0,15,2,1,
+O-TCH-06,O*NET,Elementary School Teachers,25-2021.00,"Maintain accurate and complete student records as required by laws, district policies, and administrative regulations.",0.99,4.29,4.44,,,,,,0.0,25,2,4,
+O-TCH-07,O*NET,Elementary School Teachers,25-2021.00,Organize and label materials and display students’ work.,0.97,3.56,4.19,,,,,,0.5,52,2,1,
+O-TCH-08,O*NET,Elementary School Teachers,25-2021.00,Meet with parents and guardians to discuss their children’s progress and to determine priorities for their children and their resource needs.,1,4.49,2.66,,,,,,1.0,64,3,2,
+O-TCH-09,O*NET,Elementary School Teachers,25-2021.00,"Observe and evaluate students’ performance, behavior, social development, and physical health.",1,4.52,5.98,,,,,,0.0,0,2,4,
+O-TCH-10,O*NET,Elementary School Teachers,25-2021.00,"Prepare, administer, and grade tests and assignments to evaluate students’ progress.",1,4.3,4.32,,,,,,0.0,21,2,3,
+O-TCH-11,O*NET,Elementary School Teachers,25-2021.00,"Confer with other staff members to plan and schedule lessons promoting learning, following approved curricula.",0.99,4.05,4.36,,,,,,0.0,32,2,1,
+O-TCH-12,O*NET,Elementary School Teachers,25-2021.00,"Attend professional meetings, educational conferences, and teacher training workshops to maintain and improve professional competence.",1,3.88,3.08,,,,,,0.0,25,1,3,
+O-TCH-13,O*NET,Elementary School Teachers,25-2021.00,"Plan and supervise class projects, field trips, visits by guest speakers or other experiential activities, and guide students in learning from those activities.",1,3.7,2.86,,,,,,0.5,35,4,2,
+O-TCH-14,O*NET,Elementary School Teachers,25-2021.00,"Select, store, order, issue, and inventory classroom equipment, materials, and supplies.",0.99,3.25,3,,,,,,0.0,0,1,3,
+O-TCH-15,O*NET,Elementary School Teachers,25-2021.00,"Perform administrative duties, such as school library assistance, hall and cafeteria monitoring, and bus loading and unloading.",0.91,3.48,4.5,,,,,,0.0,0,2,3,
+O-TCH-16,O*NET,Elementary School Teachers,25-2021.00,"Prepare objectives and outlines for courses of study, following curriculum guidelines or requirements of states and schools.",0.93,4.15,4.79,,,,,,0.0,42,1,4,
+O-TCH-17,O*NET,Elementary School Teachers,25-2021.00,Meet with other professionals to discuss individual students’ needs and progress.,1,4.36,3.88,,,,,,0.0,5,2,4,
+O-TCH-18,O*NET,Elementary School Teachers,25-2021.00,Prepare reports on students and activities as required by administration.,0.95,3.69,3.07,,,,,,0.5,42,3,1,
+O-TCH-19,O*NET,Elementary School Teachers,25-2021.00,Adapt teaching methods and instructional materials to meet students’ varying needs and interests.,1,4.67,5.85,,,,,,0.0,39,2,4,
+O-TCH-20,O*NET,Elementary School Teachers,25-2021.00,Prepare materials and classrooms for class activities.,1,4.6,5.92,,,,,,0.5,34,3,3,
+O-TCH-21,O*NET,Elementary School Teachers,25-2021.00,"Plan and conduct activities for a balanced program of instruction, demonstration, and work time that provides students with opportunities to observe, question, and investigate.",1,4.63,5.77,,,,,,0.5,18,4,3,
+O-TCH-22,O*NET,Elementary School Teachers,25-2021.00,Assign and grade class work and homework.,0.97,4.34,5.44,,,,,,0.0,35,2,4,
+O-TCH-23,O*NET,Elementary School Teachers,25-2021.00,Prepare and implement remedial programs for students requiring extra help.,0.91,4.35,4.92,,,,,,1.0,36,4,2,
+O-TCH-24,O*NET,Elementary School Teachers,25-2021.00,"Attend staff meetings and serve on committees, as required.",1,3.4,3.38,,,,,,0.0,54,2,4,
+O-TCH-25,O*NET,Elementary School Teachers,25-2021.00,"Use computers, audio-visual aids, and other equipment and materials to supplement presentations.",0.99,4.46,6.25,,,,,,0.5,25,2,1,
+O-TCH-26,O*NET,Elementary School Teachers,25-2021.00,Read books to entire classes or small groups.,0.99,4.52,5.25,,,,,,0.0,33,1,4,
+O-TCH-27,O*NET,Elementary School Teachers,25-2021.00,Guide and counsel students with adjustment or academic problems or with special academic interests.,0.95,4.75,5.73,,,,,,0.0,21,4,2,
+O-TCH-28,O*NET,Elementary School Teachers,25-2021.00,"Collaborate with other teachers and administrators in the development, evaluation, and revision of elementary school programs.",0.96,4.04,3.59,,,,,,0.5,34,3,1,
+O-TCH-29,O*NET,Elementary School Teachers,25-2021.00,"Organize and lead activities designed to promote physical, mental, and social development, such as games, arts and crafts, music, and storytelling.",1,4.21,5.12,,,,,,0.0,0,3,3,
+O-TCH-30,O*NET,Elementary School Teachers,25-2021.00,"Involve parent volunteers and older students in children’s activities to facilitate involvement in focused, complex play.",0.74,3.24,2.91,,,,,,0.5,37,4,4,
+O-TCH-31,O*NET,Elementary School Teachers,25-2021.00,"Supervise, evaluate, and plan assignments for teacher assistants and volunteers.",0.73,3.58,3.99,,,,,,1.0,52,4,1,
+O-TCH-32,O*NET,Elementary School Teachers,25-2021.00,Prepare students for later grades by encouraging them to explore learning opportunities and to persevere with challenging tasks.,0.99,4.3,5.57,,,,,,1.0,26,3,2,
+O-TCH-33,O*NET,Elementary School Teachers,25-2021.00,"Sponsor extracurricular activities, such as clubs, student organizations, and academic contests.",0.47,3.08,2.39,,,,,,0.0,24,2,2,
+O-TCH-34,O*NET,Elementary School Teachers,25-2021.00,Prepare for assigned classes and show written evidence of preparation upon request of immediate supervisors.,0.97,4.13,4.49,,,,,,1.0,54,4,1,
+O-TCH-35,O*NET,Elementary School Teachers,25-2021.00,"Establish clear objectives for all lessons, units, and projects and communicate those objectives to students.",1,4.36,5.82,,,,,,0.5,31,4,4,
+O-TCH-36,O*NET,Elementary School Teachers,25-2021.00,Enforce administration policies and rules governing students.,0.93,4.23,5.54,,,,,,0.0,41,2,2,
+O-TCH-37,O*NET,Elementary School Teachers,25-2021.00,Instruct and monitor students in the use and care of equipment and materials to prevent injuries and damage.,1,4.1,5.39,,,,,,0.5,32,3,2,
+O-TCH-38,O*NET,Elementary School Teachers,25-2021.00,"Provide students with disabilities with assistive devices, supportive technology, and assistance accessing facilities, such as restrooms.",0.58,4.17,4.26,,,,,,0.0,11,1,1,
+S-EMP-01,TaskNet,Emergency Medicine Physicians,29-1214.00,Develop and revise differential diagnoses for emergency department patients to guide workup and rule out life-threatening conditions.,0.96,4.29,7.0,1.0,7.92,0.53,0.52,0.71,1.0,56,4,4,
+S-EMP-02,TaskNet,Emergency Medicine Physicians,29-1214.00,"Evaluate emergency department patients through histories, physical examinations, and chart review.",0.95,4.42,6.36,1.13,8.66,0.71,0.78,0.7,0.0,0,1,4,
+S-EMP-03,TaskNet,Emergency Medicine Physicians,29-1214.00,"Interpret laboratory results, imaging studies, and electrocardiograms to guide diagnosis and clinical decision-making for emergency department patients.",0.95,3.77,7.0,3.0,7.76,0.72,0.81,0.7,1.0,74,4,4,
+S-EMP-04,TaskNet,Emergency Medicine Physicians,29-1214.00,"Reassess emergency patients after treatment or test results to update diagnoses, adjust care plans, and determine next steps.",0.96,3.68,5.55,1.55,8.01,0.68,0.78,0.74,0.5,64,4,4,
+S-EMP-05,TaskNet,Emergency Medicine Physicians,29-1214.00,Administer procedural sedation to patients undergoing reductions or other painful bedside procedures.,0.95,3.92,5.04,2.44,8.09,0.77,1.0,0.61,0.0,0,3,2,
+S-EMP-06,TaskNet,Emergency Medicine Physicians,29-1214.00,"Document patient encounters in medical records, including histories, examination findings, and medical decision-making.",0.9,4.26,5.3,2.73,8.5,0.74,0.77,0.61,0.5,0,4,4,
+S-EMP-07,TaskNet,Emergency Medicine Physicians,29-1214.00,"Discuss goals of care, treatment preferences, and resuscitation decisions with patients, families, or surrogates.",0.95,3.96,6.07,1.54,8.48,0.81,0.79,0.77,0.0,0,3,1,
+S-EMP-08,TaskNet,Emergency Medicine Physicians,29-1214.00,"Explain diagnoses, test results, and care plans to patients and families, and answer their questions about treatment options and next steps.",0.96,3.41,6.05,1.49,7.89,0.81,0.77,0.81,0.0,63,1,2,
+S-EMP-09,TaskNet,Emergency Medicine Physicians,29-1214.00,"Consult specialists, hospitalists, or primary care physicians about emergency department patient evaluation and management.",0.93,3.81,7.0,2.2,7.75,0.84,0.88,0.33,1.0,88,4,1,
+S-EMP-10,TaskNet,Emergency Medicine Physicians,29-1214.00,"Coordinate with specialists, hospitalists, and admitting teams to arrange hospital admissions, observation status, or inpatient handoffs for emergency department patients.",0.95,4.43,5.37,1.44,8.14,0.76,0.73,0.85,0.0,37,2,4,
+S-EMP-11,TaskNet,Emergency Medicine Physicians,29-1214.00,"Communicate patient status, care plans, and orders with nurses and other emergency department staff.",0.92,3.81,5.71,1.83,8.34,0.75,1.0,0.82,0.5,69,3,3,coordination
+S-EMP-12,TaskNet,Emergency Medicine Physicians,29-1214.00,"Triage emergency department patients to assess acuity, identify life-threatening conditions, and prioritize the order of care.",0.95,3.72,5.64,1.0,8.35,0.61,0.63,0.59,0.5,65,1,4,
+S-EMP-13,TaskNet,Emergency Medicine Physicians,29-1214.00,"Determine whether to admit, discharge, transfer, or observe patients based on their condition and response to treatment.",0.46,3.04,5.41,1.7,8.43,0.59,0.72,0.52,0.0,0,3,1,
+S-EMP-14,TaskNet,Emergency Medicine Physicians,29-1214.00,Assist nurses and other clinical staff with physical tasks during bedside emergency care.,0.94,3.47,3.97,1.88,8.16,0.9,1.0,0.61,0.0,0,2,2,
+S-EMP-15,TaskNet,Emergency Medicine Physicians,29-1214.00,"Lead resuscitations of critically ill or cardiac arrest patients, directing team roles, airway management, and life-saving interventions such as defibrillation, intubation, or chest compressions.",0.95,3.42,5.83,1.63,8.33,0.93,1.0,0.64,0.0,0,1,2,
+S-EMP-16,TaskNet,Emergency Medicine Physicians,29-1214.00,Respond to medical emergencies or resuscitation calls in other areas of the hospital.,0.88,4.21,6.79,1.49,7.97,0.8,0.99,0.79,0.0,0,3,4,coordination
+S-EMP-17,TaskNet,Emergency Medicine Physicians,29-1214.00,"Treat emergency department patients with medications, fluids, and other bedside interventions for acute illnesses and injuries.",0.93,3.92,6.12,3.32,7.99,0.82,0.69,0.81,0.0,52,2,4,
+S-EMP-18,TaskNet,Emergency Medicine Physicians,29-1214.00,Escalate critically ill patients to intensive care or surgical teams in coordination with hospitalists or intensivists.,0.9,4.68,4.7,2.37,8.33,0.54,0.54,0.59,0.5,42,4,4,
+S-EMP-19,TaskNet,Emergency Medicine Physicians,29-1214.00,Order diagnostic tests and medications for emergency department patients.,0.95,3.78,6.43,2.46,7.6,0.53,0.78,0.43,0.5,61,4,2,
+S-EMP-20,TaskNet,Emergency Medicine Physicians,29-1214.00,Perform bedside ultrasound to diagnose urgent conditions and guide procedures.,0.83,4.21,5.79,1.35,8.33,0.81,0.89,0.67,0.0,0,1,1,
+S-EMP-21,TaskNet,Emergency Medicine Physicians,29-1214.00,"Supervise residents, physician assistants, and nurse practitioners during emergency department patient care.",0.96,4.25,6.98,3.71,8.08,0.9,0.92,0.77,0.0,51,2,2,
+S-EMP-22,TaskNet,Emergency Medicine Physicians,29-1214.00,"Activate emergency response pathways for time-sensitive conditions such as stroke, cardiac arrest, or sepsis.",0.93,3.55,3.01,1.0,8.75,0.49,0.73,0.52,0.0,37,3,3,
+S-EMP-23,TaskNet,Emergency Medicine Physicians,29-1214.00,"Attend emergency department, committee, and multidisciplinary meetings on operations, clinical care, and quality improvement.",0.97,3.68,5.48,1.75,7.46,0.68,0.57,0.5,0.0,48,3,3,
+S-EMP-24,TaskNet,Emergency Medicine Physicians,29-1214.00,"Complete continuing medical education requirements, such as coursework, conferences, or literature review, to maintain medical licensure.",0.81,3.8,4.56,1.3,7.85,0.76,0.69,0.43,0.5,46,3,2,teaching_pd
+S-EMP-25,TaskNet,Emergency Medicine Physicians,29-1214.00,Contact patients after emergency department visits to report test results.,0.62,2.44,4.98,3.06,7.72,0.55,0.75,0.63,1.0,61,4,1,coordination
+S-EMP-26,TaskNet,Emergency Medicine Physicians,29-1214.00,"Counsel patients on risks and alternatives and obtain informed consent before invasive procedures, procedural sedation, or high-risk emergency treatments.",0.97,3.9,4.31,3.0,8.14,0.65,0.63,0.86,0.0,0,2,2,
+S-EMP-27,TaskNet,Emergency Medicine Physicians,29-1214.00,Countersign resident and advanced practice provider charts to meet emergency department documentation requirements.,0.85,3.02,5.71,1.25,7.95,0.67,0.72,0.55,0.0,60,1,2,coordination;oversight_qa
+S-EMP-28,TaskNet,Emergency Medicine Physicians,29-1214.00,"Document procedures performed and time spent providing critical care, including compliance reporting requirements and billing codes.",0.94,3.91,5.55,1.66,7.54,0.68,0.57,0.92,0.0,0,2,1,
+S-EMP-29,TaskNet,Emergency Medicine Physicians,29-1214.00,"Evaluate new equipment, devices, and supply inventory for emergency department use.",0.96,4.18,5.41,2.03,8.33,1.0,0.81,0.82,0.0,48,3,2,oversight_qa
+S-EMP-30,TaskNet,Emergency Medicine Physicians,29-1214.00,"Evaluate residents and medical students on clinical performance, documenting their development and providing feedback after supervised shifts.",0.94,4.23,5.01,1.39,7.83,0.91,1.0,0.51,0.0,0,4,2,teaching_pd;oversight_qa
+S-EMP-31,TaskNet,Emergency Medicine Physicians,29-1214.00,Interview and rank residency applicants during the recruitment selection process.,0.94,4.02,5.35,2.59,7.89,0.53,0.49,0.53,0.0,61,2,3,
+S-EMP-32,TaskNet,Emergency Medicine Physicians,29-1214.00,"Onboard new physicians, advanced practice providers, and rotating residents to their emergency medicine roles.",0.96,4.22,5.31,1.2,8.1,0.4,0.5,0.64,0.5,56,3,1,teaching_pd
+S-EMP-33,TaskNet,Emergency Medicine Physicians,29-1214.00,Participate in developing or updating clinical protocols and guidelines for emergency care.,0.93,3.84,5.81,2.36,8.16,0.68,0.55,0.64,1.0,70,4,2,oversight_qa
+S-EMP-34,TaskNet,Emergency Medicine Physicians,29-1214.00,"Participate in reviews of patient outcomes, safety events, quality measures, or research to help identify opportunities to improve emergency care.",0.91,3.69,6.1,1.58,8.51,0.57,0.75,0.37,0.5,50,3,2,
+S-EMP-35,TaskNet,Emergency Medicine Physicians,29-1214.00,"Perform bedside procedures, such as laceration repair, abscess drainage, fracture reduction, chest tube placement, or central line insertion.",0.92,3.11,4.77,3.24,7.59,0.52,0.86,0.61,0.0,0,2,1,
+S-EMP-36,TaskNet,Emergency Medicine Physicians,29-1214.00,Receive handoff information on active emergency department patients from outgoing physicians or prehospital crews at shift change.,0.84,3.05,4.34,3.04,8.94,0.78,0.76,0.59,0.0,31,3,2,coordination
+S-EMP-37,TaskNet,Emergency Medicine Physicians,29-1214.00,Respond to prehospital communications from emergency medical services about incoming patients or needed medical direction.,0.95,3.52,5.54,2.9,7.97,0.63,0.81,0.76,0.5,58,4,4,coordination
+S-EMP-38,TaskNet,Emergency Medicine Physicians,29-1214.00,"Teach residents, medical students, and other healthcare professionals through lectures, simulations, or clinical instruction.",0.53,2.57,6.19,1.28,7.43,0.59,0.77,0.68,0.0,54,1,1,teaching_pd
+O-EMP-01,O*NET,Emergency Medicine Physicians,29-1214.00,"Analyze records, examination information, or test results to diagnose medical conditions.",1,4.9,6.87,,,,,,0.0,0,2,3,
+O-EMP-02,O*NET,Emergency Medicine Physicians,29-1214.00,Assess patients’ pain levels or sedation requirements.,1,4.4,6.47,,,,,,1.0,65,4,1,
+O-EMP-03,O*NET,Emergency Medicine Physicians,29-1214.00,"Collect and record patient information, such as medical history or examination results, in electronic or handwritten medical records.",1,4.57,6.97,,,,,,0.0,0,1,3,
+O-EMP-04,O*NET,Emergency Medicine Physicians,29-1214.00,Communicate likely outcomes of medical diseases or traumatic conditions to patients or their representatives.,1,4.83,6.4,,,,,,1.0,62,3,3,
+O-EMP-05,O*NET,Emergency Medicine Physicians,29-1214.00,Conduct primary patient assessments that include information from prior medical care.,1,4.83,6.9,,,,,,0.5,20,2,3,
+O-EMP-06,O*NET,Emergency Medicine Physicians,29-1214.00,"Consult with hospitalists and other professionals, such as social workers, regarding patients’ hospital admission, continued observation, transition of care, or discharge.",1,4.86,6.23,,,,,,0.0,46,1,4,
+O-EMP-07,O*NET,Emergency Medicine Physicians,29-1214.00,Discuss patients’ treatment plans with physicians and other medical professionals.,1,4.47,6.03,,,,,,0.5,54,2,3,
+O-EMP-08,O*NET,Emergency Medicine Physicians,29-1214.00,Evaluate patients’ vital signs or laboratory data to determine emergency intervention needs and priority of treatment.,1,5,6.97,,,,,,0.0,44,2,3,
+O-EMP-09,O*NET,Emergency Medicine Physicians,29-1214.00,"Monitor patients’ conditions, and reevaluate treatments, as necessary.",1,4.83,6.8,,,,,,0.5,44,4,1,
+O-EMP-10,O*NET,Emergency Medicine Physicians,29-1214.00,Perform emergency resuscitations on patients.,1,5,4.9,,,,,,0.0,0,1,1,
+O-EMP-11,O*NET,Emergency Medicine Physicians,29-1214.00,"Perform such medical procedures as emergent cricothyrotomy, endotracheal intubation, and emergency thoracotomy.",1,5,3.6,,,,,,0.0,0,4,3,
+O-EMP-12,O*NET,Emergency Medicine Physicians,29-1214.00,Refer patients to specialists or other practitioners.,1,4.37,6.17,,,,,,0.0,61,2,2,
+O-EMP-13,O*NET,Emergency Medicine Physicians,29-1214.00,Select and prescribe medications to address patient needs.,1,4.72,6.79,,,,,,0.0,69,1,3,
+O-EMP-14,O*NET,Emergency Medicine Physicians,29-1214.00,"Select, request, perform, or interpret diagnostic procedures, such as laboratory tests, electrocardiograms, emergency ultrasounds, and radiographs.",1,5,6.97,,,,,,0.0,0,2,1,
+O-EMP-15,O*NET,Emergency Medicine Physicians,29-1214.00,Stabilize patients in critical condition.,1,5,5.48,,,,,,0.5,52,1,3,
+O-EMP-16,O*NET,Emergency Medicine Physicians,29-1214.00,"Direct and coordinate activities of nurses, assistants, specialists, residents, and other medical staff.",1,4.73,6.73,,,,,,0.0,55,1,4,
+O-EMP-18,O*NET,Emergency Medicine Physicians,29-1214.00,"Identify factors that may affect patient management, such as age, gender, barriers to communication, and underlying disease.",1,4.46,6.52,,,,,,0.5,56,4,4,
+S-PCA-01,TaskNet,Personal Care Aides,31-1122.00,"Administer prescribed medications to clients at scheduled times, recording doses and responses in their charts.",0.93,3.73,7.0,2.55,1.66,0.69,0.58,0.55,0.5,34,4,2,
+S-PCA-02,TaskNet,Personal Care Aides,31-1122.00,"Set out doses and prompt clients to self-administer medications on schedule, following their care plan.",0.94,3.52,5.75,1.96,2.89,0.68,0.93,0.64,0.5,42,3,3,
+S-PCA-03,TaskNet,Personal Care Aides,31-1122.00,"Provide toileting assistance and incontinence care, including changing briefs and soiled bedding.",0.9,4.06,4.91,1.72,2.63,0.57,0.53,0.23,0.0,0,2,4,
+S-PCA-04,TaskNet,Personal Care Aides,31-1122.00,"Assist clients with bathing, grooming, and dressing during daily personal care routines.",0.92,4.02,4.49,3.33,3.64,0.79,0.8,0.37,0.0,0,2,3,
+S-PCA-05,TaskNet,Personal Care Aides,31-1122.00,"Assist clients with walking, transfers, and repositioning, using mobility aids such as gait belts and ceiling lifts.",0.39,3.1,5.43,1.89,2.96,0.86,0.86,0.53,0.0,0,4,2,
+S-PCA-06,TaskNet,Personal Care Aides,31-1122.00,"Communicate observed changes in clients’ condition, needs, or safety concerns to supervisors, family members, or care team members.",0.93,3.66,4.98,1.0,2.84,0.83,0.74,0.24,0.0,17,2,3,coordination
+S-PCA-07,TaskNet,Personal Care Aides,31-1122.00,"Document care provided, client observations, and completed tasks in charts and shift notes after each visit or shift.",0.9,3.53,5.26,1.0,2.13,0.77,0.92,0.46,0.0,24,4,4,
+S-PCA-08,TaskNet,Personal Care Aides,31-1122.00,"Clean and arrange clients’ homes, including floors, kitchens, bathrooms, and laundry.",0.87,3.36,6.38,2.18,2.76,0.65,0.97,0.4,0.0,0,3,4,
+S-PCA-09,TaskNet,Personal Care Aides,31-1122.00,"Run errands on behalf of clients, such as grocery shopping or picking up medications and household supplies.",0.94,3.61,6.86,2.05,3.54,0.58,0.69,0.6,0.0,0,2,3,
+S-PCA-10,TaskNet,Personal Care Aides,31-1122.00,"Confirm that clients have eaten, taken their medications, and need nothing else before ending a visit.",0.96,4.45,6.01,1.86,2.07,0.54,0.57,0.24,0.0,27,1,4,
+S-PCA-11,TaskNet,Personal Care Aides,31-1122.00,"Greet clients and assess their communication, health, and daily care needs at the start of each visit.",0.93,3.71,5.26,1.67,4.04,0.69,0.83,0.42,0.5,6,3,3,
+S-PCA-12,TaskNet,Personal Care Aides,31-1122.00,Listen to clients and respond to their everyday requests and needs during care interactions.,0.95,3.86,4.72,3.02,2.52,1.0,0.98,0.49,0.5,33,4,3,
+S-PCA-13,TaskNet,Personal Care Aides,31-1122.00,"Provide companionship to clients through conversation, games, walks, or shared leisure activities such as music, crafts, or television.",0.63,2.98,5.93,2.36,2.67,0.56,0.82,0.47,0.0,0,2,2,
+S-PCA-14,TaskNet,Personal Care Aides,31-1122.00,"Feed clients or assist them with eating and drinking during meals and snacks, following any dietary restrictions.",0.94,3.82,6.61,2.69,3.55,0.87,0.8,0.43,0.0,0,1,2,
+S-PCA-15,TaskNet,Personal Care Aides,31-1122.00,"Teach clients daily living skills, such as personal hygiene, household tasks, or budgeting, through guided practice and repetition.",0.89,3.67,5.37,1.79,2.41,0.39,0.43,0.55,0.0,16,1,4,teaching_pd
+S-PCA-16,TaskNet,Personal Care Aides,31-1122.00,"Prepare meals and snacks for clients, including modified textures or diet-specific foods to meet individual nutritional needs.",0.66,2.46,5.1,1.46,3.03,0.68,0.82,0.38,0.0,0,3,1,
+S-PCA-17,TaskNet,Personal Care Aides,31-1122.00,"Transport clients by vehicle to appointments, stores, or community activities.",0.88,3.86,4.74,2.84,3.63,0.53,0.46,0.49,0.0,0,1,4,
+S-PCA-18,TaskNet,Personal Care Aides,31-1122.00,"Support clients’ communication skills, using conversation, augmentative communication devices, or mood and emotion boards.",0.86,4.3,5.46,2.29,2.69,0.48,0.72,0.42,1.0,29,4,4,
+S-PCA-19,TaskNet,Personal Care Aides,31-1122.00,"Accompany clients to appointments, outings, or community activities to provide support and advocacy during visits.",0.5,3.08,4.94,2.44,2.59,0.52,0.74,0.3,0.0,0,3,1,
+S-PCA-20,TaskNet,Personal Care Aides,31-1122.00,Arrange specialized training for clients with individual care needs.,0.85,4.05,5.71,1.67,2.92,0.66,1.0,0.31,0.0,34,1,1,coordination
+S-PCA-21,TaskNet,Personal Care Aides,31-1122.00,"Assist clients with prescribed exercises, such as range-of-motion or speech therapy routines.",0.43,2.34,5.83,1.89,2.19,0.69,0.82,0.44,0.5,36,2,1,
+S-PCA-22,TaskNet,Personal Care Aides,31-1122.00,"Care for clients’ pets during home visits, such as feeding or cleaning up after animals.",0.96,3.76,4.62,1.58,2.46,0.44,0.61,0.45,0.0,0,2,1,
+S-PCA-23,TaskNet,Personal Care Aides,31-1122.00,"Complete required safety training, refresher courses, and emergency drills with clients and staff.",0.41,3.1,5.83,1.52,2.93,0.78,0.78,0.46,1.0,18,4,1,teaching_pd
+S-PCA-24,TaskNet,Personal Care Aides,31-1122.00,Connect clients with community resources or covered care providers.,0.95,3.9,5.11,3.38,2.22,0.52,0.59,0.57,0.0,18,3,1,
+S-PCA-25,TaskNet,Personal Care Aides,31-1122.00,"Develop individualized care plans for clients, incorporating behavioral, health, nutritional, and financial goals based on client preferences and needs.",0.91,4.26,3.74,2.52,3.44,0.47,0.8,0.27,0.0,29,1,3,
+S-PCA-26,TaskNet,Personal Care Aides,31-1122.00,Follow infection control and emergency safety procedures during client care.,0.92,4.26,4.35,1.03,2.65,0.51,0.56,0.36,0.0,3,1,1,oversight_qa
+S-PCA-27,TaskNet,Personal Care Aides,31-1122.00,Maintain care supplies and medication to support uninterrupted daily health routines.,0.93,3.21,5.38,2.74,3.15,0.53,0.71,0.49,0.0,0,2,1,
+S-PCA-28,TaskNet,Personal Care Aides,31-1122.00,"Observe clients throughout care shifts for changes in condition, mobility, behavior, or safety, such as altered gait, skin breakdown, or mood shifts.",0.94,4.35,4.62,1.67,3.11,0.46,0.61,0.39,0.5,15,3,4,
+S-PCA-29,TaskNet,Personal Care Aides,31-1122.00,"Perform catheter, ostomy, or feeding tube care for clients during scheduled care visits.",0.97,3.21,6.01,2.43,3.08,0.75,1.0,0.58,0.5,0,4,2,
+S-PCA-30,TaskNet,Personal Care Aides,31-1122.00,"Plan daily schedules and activity options for clients based on their interests, sensory needs, and available resources.",0.95,3.78,5.3,1.39,2.68,0.59,0.54,0.52,0.5,3,4,2,
+S-PCA-31,TaskNet,Personal Care Aides,31-1122.00,Redirect clients when they become frustrated or behave unacceptably.,0.91,4.48,4.54,2.2,3.74,0.72,0.78,0.57,0.0,16,1,1,
+S-PCA-32,TaskNet,Personal Care Aides,31-1122.00,"Respond to medical emergencies, such as falls or injuries, providing first aid and escalating to nursing staff or first responders.",0.93,3.91,5.43,2.2,2.6,0.41,0.68,0.36,0.0,10,1,3,
+S-PCA-33,TaskNet,Personal Care Aides,31-1122.00,"Review care plans, supply inventories, and client schedules before starting each visit.",0.88,3.94,4.42,1.75,3.62,0.62,0.76,0.18,0.0,9,1,2,oversight_qa
+S-PCA-34,TaskNet,Personal Care Aides,31-1122.00,Schedule transportation for client appointments or follow-up visits.,0.49,2.63,5.3,2.23,2.98,0.85,0.86,0.41,0.0,0,4,2,coordination
+S-PCA-35,TaskNet,Personal Care Aides,31-1122.00,"Train staff on person-centered care techniques, such as safe transfers, positioning, and dignified assistance with daily routines.",0.94,4.28,4.2,1.47,2.59,0.6,0.78,0.49,0.0,0,4,1,teaching_pd
+S-PCA-36,TaskNet,Personal Care Aides,31-1122.00,"Work through homework and academic materials with school-age clients, setting up a suitable workspace and removing distractions.",0.9,4.06,4.74,2.93,2.98,0.68,0.87,0.38,0.5,23,3,2,
+O-PCA-01,O*NET,Personal Care Aides,31-1122.00,"Perform healthcare-related tasks, such as monitoring vital signs and medication, under the direction of registered nurses or physiotherapists.",0.88,4.46,5.08,,,,,,0.0,14,4,3,
+O-PCA-02,O*NET,Personal Care Aides,31-1122.00,"Administer bedside or personal care, such as ambulation or personal hygiene assistance.",0.95,4.65,5.46,,,,,,0.5,7,4,2,
+O-PCA-03,O*NET,Personal Care Aides,31-1122.00,"Prepare and maintain records of client progress and services performed, reporting changes in client condition to manager or supervisor.",0.92,4.65,5.28,,,,,,1.0,40,1,4,
+O-PCA-04,O*NET,Personal Care Aides,31-1122.00,"Perform housekeeping duties, such as cooking, cleaning, washing clothes or dishes, or running errands.",0.81,4.19,4.98,,,,,,0.5,0,4,3,
+O-PCA-05,O*NET,Personal Care Aides,31-1122.00,"Care for individuals or families during periods of incapacitation, family disruption, or convalescence, providing companionship, personal care, or help in adjusting to new lifestyles.",0.9,4.39,5.3,,,,,,0.5,51,3,4,
+O-PCA-06,O*NET,Personal Care Aides,31-1122.00,"Instruct or advise clients on issues, such as household cleanliness, utilities, hygiene, nutrition, or infant care.",0.86,4.42,5.25,,,,,,0.0,23,1,2,
+O-PCA-07,O*NET,Personal Care Aides,31-1122.00,"Plan, shop for, or prepare nutritious meals or assist families in planning, shopping for, or preparing nutritious meals.",0.66,4.03,4.32,,,,,,0.0,0,2,4,
+O-PCA-08,O*NET,Personal Care Aides,31-1122.00,"Transport clients to locations outside the home, such as to physicians’ offices or on outings, using a motor vehicle.",0.64,3.73,3.05,,,,,,0.0,0,2,3,
+O-PCA-09,O*NET,Personal Care Aides,31-1122.00,"Provide clients with communication assistance, typing their correspondence or obtaining information for them.",0.91,4.18,5.17,,,,,,0.0,3,3,4,
+O-PCA-10,O*NET,Personal Care Aides,31-1122.00,"Participate in case reviews, consulting with the team caring for the client, to evaluate the client’s needs and plan for continuing services.",0.82,4.45,4.34,,,,,,1.0,58,4,2,
+O-PCA-11,O*NET,Personal Care Aides,31-1122.00,Train family members to provide bedside care.,0.59,4.56,4.81,,,,,,0.0,9,2,3,
+S-DSH-01,TaskNet,Dishwashers,35-9021.00,"Load dishes, glassware, flatware, and cookware into racks and run them through the dish machine.",0.91,3.87,7.0,1.82,2.0,1.0,0.87,0.37,0.0,0,2,4,
+S-DSH-02,TaskNet,Dishwashers,35-9021.00,"Retrieve soiled pots, pans, dishes, and utensils from kitchen work areas and bring them to the dishwashing area.",0.97,4.07,6.42,2.31,1.89,0.85,0.89,0.2,0.0,0,2,2,
+S-DSH-03,TaskNet,Dishwashers,35-9021.00,"Scrape food debris from dirty dishes, glassware, and cookware, then sort and pre-rinse them into racks before machine washing.",0.59,3.43,6.42,1.45,2.0,0.89,0.91,0.28,0.0,0,2,2,
+S-DSH-04,TaskNet,Dishwashers,35-9021.00,"Hand wash cookware, pots, pans, and utensils, sanitizing them after cleaning.",0.96,3.84,6.63,1.95,2.01,0.91,0.97,0.26,0.0,0,2,1,
+S-DSH-05,TaskNet,Dishwashers,35-9021.00,"Dry and restock clean dishes, glassware, flatware, and cookware in their designated kitchen and service areas.",0.88,4.39,5.56,2.39,1.5,0.72,0.68,0.32,0.0,0,3,2,
+S-DSH-06,TaskNet,Dishwashers,35-9021.00,"Clean and sanitize food-preparation surfaces, countertops, walls, and kitchen equipment to keep cooking areas free of grease and contamination.",0.95,4.57,6.06,2.33,1.66,1.0,1.0,0.36,0.0,0,2,3,
+S-DSH-07,TaskNet,Dishwashers,35-9021.00,"Maintain the dish machine, sinks, drains, and surrounding work area throughout and between shifts.",0.95,4.38,4.37,2.62,1.41,0.79,0.75,0.46,0.0,0,2,4,
+S-DSH-08,TaskNet,Dishwashers,35-9021.00,"Remove trash and replace can liners in the kitchen, dish area, and dining room.",0.93,3.98,6.25,2.01,1.96,1.0,0.94,0.52,0.0,0,4,2,
+S-DSH-09,TaskNet,Dishwashers,35-9021.00,"Retrieve and redistribute supplies, ingredients, and utensils between on-site storage areas and kitchen or dining service stations.",0.97,3.83,5.83,1.95,2.7,0.72,0.79,0.23,0.0,0,2,4,
+S-DSH-10,TaskNet,Dishwashers,35-9021.00,"Sweep, scrub, and mop kitchen and dining area floors, placing wet-floor signs and squeegeeing away standing water.",0.93,3.47,6.32,3.0,2.55,0.77,0.86,0.23,0.0,0,4,2,
+S-DSH-11,TaskNet,Dishwashers,35-9021.00,"Receive, unload, and store incoming deliveries of food, beverages, tableware, and cleaning supplies in designated storage areas.",0.93,4.44,6.26,2.01,1.9,0.73,0.83,0.51,0.0,0,3,4,coordination
+S-DSH-12,TaskNet,Dishwashers,35-9021.00,"Clear, wipe, and reset dining tables and chairs between customers.",0.95,3.24,5.74,1.62,2.14,0.68,0.9,0.49,0.0,0,2,3,
+S-DSH-13,TaskNet,Dishwashers,35-9021.00,"Move chairs, tables, and other dining-area furniture to assist with cleaning, closing, or storage tasks, including stacking chairs at the end of the night.",0.92,3.36,5.44,2.08,2.07,0.83,0.9,0.31,0.0,0,3,1,
+O-DSH-01,O*NET,Dishwashers,35-9021.00,"Wash dishes, glassware, flatware, pots, or pans, using dishwashers or by hand.",0.93,4.49,6.29,,,,,,0.0,0,3,4,
+O-DSH-02,O*NET,Dishwashers,35-9021.00,"Place clean dishes, utensils, or cooking equipment in storage areas.",1,4.31,6.05,,,,,,0.0,0,2,1,
+O-DSH-03,O*NET,Dishwashers,35-9021.00,"Maintain kitchen work areas, equipment, or utensils in clean and orderly condition.",0.94,4.43,6.1,,,,,,0.0,0,2,4,
+O-DSH-04,O*NET,Dishwashers,35-9021.00,"Stock supplies, such as food or utensils, in serving stations, cupboards, refrigerators, or salad bars.",0.89,3.93,5.38,,,,,,0.0,0,4,2,
+O-DSH-05,O*NET,Dishwashers,35-9021.00,Sweep or scrub floors.,1,4.21,5.42,,,,,,0.0,0,2,2,
+O-DSH-06,O*NET,Dishwashers,35-9021.00,"Sort and remove trash, placing it in designated pickup areas.",0.92,3.79,5.23,,,,,,0.0,0,4,1,
+O-DSH-07,O*NET,Dishwashers,35-9021.00,"Transfer supplies or equipment between storage and work areas, by hand or using hand trucks.",0.68,3.73,5.01,,,,,,0.0,0,4,3,
+O-DSH-08,O*NET,Dishwashers,35-9021.00,Receive and store supplies.,0.68,3.65,4.57,,,,,,0.0,0,4,3,
+O-DSH-09,O*NET,Dishwashers,35-9021.00,Load or unload trucks that deliver or pick up food or supplies.,0.57,3.95,3.75,,,,,,0.0,0,2,3,
+O-DSH-11,O*NET,Dishwashers,35-9021.00,Clean garbage cans with water or steam.,0.9,3.64,4.29,,,,,,0.0,0,3,3,
+O-DSH-12,O*NET,Dishwashers,35-9021.00,Clean or prepare various foods for cooking or serving.,0.75,3.83,5.26,,,,,,0.0,0,2,1,
+O-DSH-13,O*NET,Dishwashers,35-9021.00,Set up banquet tables.,0.53,3.18,2.68,,,,,,0.0,0,2,4,
+O-DSH-14,O*NET,Dishwashers,35-9021.00,Prepare and package individual place settings.,0.64,3.21,4.65,,,,,,0.0,0,4,1,
+</script>
+<script type="text/csv" id="embedded-relationships">
+sonet_id,onet_id,relation
+S-SWD-04,O-SWD-03,overlaps
+S-SWD-04,O-SWD-04,overlaps
+S-SWD-07,O-SWD-05,refines
+S-SWD-12,O-SWD-06,refines
+S-SWD-08,O-SWD-05,refines
+S-SWD-18,O-SWD-09,overlaps
+S-SWD-02,O-SWD-02,overlaps
+S-SWD-20,O-SWD-10,refines
+S-SWD-15,O-SWD-07,overlaps
+S-SWD-03,O-SWD-02,overlaps
+S-SWD-21,O-SWD-10,refines
+S-SWD-16,O-SWD-07,overlaps
+S-SWD-17,O-SWD-08,overlaps
+S-SWD-09,O-SWD-05,refines
+S-SWD-09,O-SWD-07,overlaps
+S-SWD-06,O-SWD-04,overlaps
+S-SWD-10,O-SWD-05,refines
+S-SWD-10,O-SWD-07,refines
+S-SWD-19,O-SWD-09,overlaps
+S-SWD-01,O-SWD-01,overlaps
+S-SWD-01,O-SWD-05,refines
+S-SWD-05,O-SWD-03,overlaps
+S-SWD-05,O-SWD-04,overlaps
+S-SWD-13,O-SWD-06,refines
+S-SWD-11,O-SWD-05,refines
+S-SWD-14,O-SWD-06,refines
+S-LAW-01,O-LAW-01,overlaps
+S-LAW-01,O-LAW-04,overlaps
+S-LAW-02,O-LAW-02,overlaps
+S-LAW-02,O-LAW-04,overlaps
+S-LAW-02,O-LAW-07,overlaps
+S-LAW-16,O-LAW-16,refines
+S-LAW-07,O-LAW-06,refines
+S-LAW-14,O-LAW-13,overlaps
+S-LAW-08,O-LAW-11,overlaps
+S-LAW-08,O-LAW-06,refines
+S-LAW-17,O-LAW-17,overlaps
+S-LAW-17,O-LAW-18,overlaps
+S-LAW-21,O-LAW-18,overlaps
+S-LAW-03,O-LAW-02,overlaps
+S-LAW-19,O-LAW-18,refines
+S-LAW-06,O-LAW-05,refines
+S-LAW-10,O-LAW-10,overlaps
+S-LAW-22,O-LAW-19,overlaps
+S-LAW-12,O-LAW-19,refines
+S-LAW-12,O-LAW-12,refines
+S-LAW-05,O-LAW-04,overlaps
+S-LAW-05,O-LAW-09,refines
+S-LAW-05,O-LAW-06,refines
+S-LAW-04,O-LAW-04,overlaps
+S-LAW-04,O-LAW-03,overlaps
+S-LAW-04,O-LAW-09,overlaps
+S-LAW-04,O-LAW-06,refines
+S-LAW-04,O-LAW-08,overlaps
+S-LAW-11,O-LAW-14,overlaps
+S-LAW-11,O-LAW-10,overlaps
+S-LAW-20,O-LAW-18,refines
+S-LAW-09,O-LAW-07,overlaps
+S-LAW-18,O-LAW-17,overlaps
+S-LAW-13,O-LAW-19,refines
+S-LAW-13,O-LAW-12,refines
+S-LAW-15,O-LAW-15,overlaps
+S-TCH-25,O-TCH-14,overlaps
+S-TCH-11,O-TCH-05,overlaps
+S-TCH-11,O-TCH-10,refines
+S-TCH-12,O-TCH-05,overlaps
+S-TCH-13,O-TCH-05,overlaps
+S-TCH-02,O-TCH-22,refines
+S-TCH-02,O-TCH-02,refines
+S-TCH-02,O-TCH-21,refines
+S-TCH-02,O-TCH-23,refines
+S-TCH-23,O-TCH-12,overlaps
+S-TCH-29,O-TCH-24,overlaps
+S-TCH-08,O-TCH-03,overlaps
+S-TCH-08,O-TCH-17,overlaps
+S-TCH-24,O-TCH-13,overlaps
+S-TCH-18,O-TCH-10,overlaps
+S-TCH-28,O-TCH-19,refines
+S-TCH-28,O-TCH-23,overlaps
+S-TCH-01,O-TCH-01,overlaps
+S-TCH-17,O-TCH-22,refines
+S-TCH-17,O-TCH-10,refines
+S-TCH-09,O-TCH-03,overlaps
+S-TCH-09,O-TCH-08,overlaps
+S-TCH-14,O-TCH-06,overlaps
+S-TCH-20,O-TCH-11,overlaps
+S-TCH-20,O-TCH-17,overlaps
+S-TCH-21,O-TCH-11,overlaps
+S-TCH-21,O-TCH-21,refines
+S-TCH-16,O-TCH-09,refines
+S-TCH-03,O-TCH-19,overlaps
+S-TCH-03,O-TCH-02,refines
+S-TCH-03,O-TCH-21,refines
+S-TCH-22,O-TCH-11,overlaps
+S-TCH-22,O-TCH-21,refines
+S-TCH-22,O-TCH-16,overlaps
+S-TCH-19,O-TCH-11,refines
+S-TCH-19,O-TCH-21,refines
+S-TCH-19,O-TCH-23,overlaps
+S-TCH-30,O-TCH-25,overlaps
+S-TCH-27,O-TCH-18,overlaps
+S-TCH-04,O-TCH-02,refines
+S-TCH-10,O-TCH-04,overlaps
+S-TCH-15,O-TCH-07,overlaps
+S-TCH-15,O-TCH-20,overlaps
+S-TCH-15,O-TCH-14,overlaps
+S-TCH-26,O-TCH-15,overlaps
+S-TCH-06,O-TCH-02,overlaps
+S-TCH-06,O-TCH-21,overlaps
+S-TCH-07,O-TCH-19,overlaps
+S-TCH-07,O-TCH-02,overlaps
+S-TCH-07,O-TCH-21,refines
+S-TCH-07,O-TCH-23,overlaps
+S-TCH-05,O-TCH-02,refines
+S-EMP-05,O-EMP-02,overlaps
+S-EMP-14,O-EMP-10,refines
+S-EMP-11,O-EMP-07,overlaps
+S-EMP-09,O-EMP-06,overlaps
+S-EMP-09,O-EMP-07,overlaps
+S-EMP-10,O-EMP-06,overlaps
+S-EMP-10,O-EMP-16,refines
+S-EMP-13,O-EMP-09,overlaps
+S-EMP-01,O-EMP-01,overlaps
+S-EMP-07,O-EMP-04,overlaps
+S-EMP-06,O-EMP-03,overlaps
+S-EMP-18,O-EMP-12,overlaps
+S-EMP-02,O-EMP-01,overlaps
+S-EMP-02,O-EMP-05,overlaps
+S-EMP-02,O-EMP-08,overlaps
+S-EMP-08,O-EMP-04,overlaps
+S-EMP-03,O-EMP-01,overlaps
+S-EMP-03,O-EMP-08,overlaps
+S-EMP-03,O-EMP-14,refines
+S-EMP-15,O-EMP-16,refines
+S-EMP-15,O-EMP-10,overlaps
+S-EMP-15,O-EMP-11,overlaps
+S-EMP-15,O-EMP-15,overlaps
+S-EMP-19,O-EMP-13,overlaps
+S-EMP-19,O-EMP-14,refines
+S-EMP-20,O-EMP-14,refines
+S-EMP-04,O-EMP-01,overlaps
+S-EMP-04,O-EMP-08,overlaps
+S-EMP-04,O-EMP-09,overlaps
+S-EMP-16,O-EMP-10,overlaps
+S-EMP-16,O-EMP-11,overlaps
+S-EMP-21,O-EMP-16,refines
+S-EMP-17,O-EMP-10,overlaps
+S-EMP-17,O-EMP-13,overlaps
+S-EMP-17,O-EMP-15,overlaps
+S-EMP-12,O-EMP-08,overlaps
+S-PCA-01,O-PCA-01,refines
+S-PCA-04,O-PCA-02,overlaps
+S-PCA-04,O-PCA-05,refines
+S-PCA-05,O-PCA-02,overlaps
+S-PCA-05,O-PCA-05,refines
+S-PCA-08,O-PCA-04,refines
+S-PCA-06,O-PCA-03,overlaps
+S-PCA-10,O-PCA-05,refines
+S-PCA-07,O-PCA-03,overlaps
+S-PCA-14,O-PCA-05,overlaps
+S-PCA-11,O-PCA-05,refines
+S-PCA-12,O-PCA-05,refines
+S-PCA-16,O-PCA-07,overlaps
+S-PCA-13,O-PCA-05,refines
+S-PCA-03,O-PCA-02,refines
+S-PCA-03,O-PCA-05,refines
+S-PCA-09,O-PCA-04,refines
+S-PCA-09,O-PCA-07,overlaps
+S-PCA-02,O-PCA-01,refines
+S-PCA-18,O-PCA-09,overlaps
+S-PCA-15,O-PCA-06,overlaps
+S-PCA-17,O-PCA-08,overlaps
+S-DSH-06,O-DSH-03,refines
+S-DSH-05,O-DSH-02,overlaps
+S-DSH-05,O-DSH-04,overlaps
+S-DSH-04,O-DSH-03,refines
+S-DSH-04,O-DSH-01,overlaps
+S-DSH-01,O-DSH-01,refines
+S-DSH-07,O-DSH-03,refines
+S-DSH-11,O-DSH-09,overlaps
+S-DSH-11,O-DSH-08,overlaps
+S-DSH-08,O-DSH-03,refines
+S-DSH-08,O-DSH-06,overlaps
+S-DSH-09,O-DSH-04,overlaps
+S-DSH-09,O-DSH-07,overlaps
+S-DSH-02,O-DSH-03,refines
+S-DSH-02,O-DSH-01,refines
+S-DSH-03,O-DSH-01,refines
+S-DSH-10,O-DSH-05,overlaps
+</script>
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const DOT_PX = 6.2, STEP = 11;                /* dot radius in screen px; hex-grid spacing in logical px */
+const TOP = 8, PAD = 18, BOT = 12;
+const NUM = ["relevance","importance","frequency","duration","training_svp","articulability","verifiability","top_worker_gap","eloundou_beta","rl_feasibility","chat_use_quartile","postings_quartile"];
+const FREQ = ["Once per year or less","More than once per year","More than once per month","More than once per week","Daily","Several times per day","Hourly or more often"];
+const DUR = ["Under 15 minutes","15 to 30 minutes","30 minutes to 1 hour","1 to 2 hours","2 to 4 hours","4 hours to a workday","1 to 2 workdays","2 to 4 workdays","4 workdays or more"];
+/* short forms of the scales, for the rating rows */
+const FREQ_S = ["Yearly or less","Few times a year","Monthly","Weekly","Daily","Several a day","Hourly"];
+const DUR_S = ["Under 15 min","15–30 min","30–60 min","1–2 hours","2–4 hours","Most of a day","1–2 days","2–4 days","4+ days"];
+const SVP_S = ["A demo","Up to 1 month","1–3 months","3–6 months","6–12 months","1–2 years","2–4 years","4–10 years","10+ years"];
+const SVP = ["Short demonstration","Up to 1 month","1 to 3 months","3 to 6 months","6 months to 1 year","1 to 2 years","2 to 4 years","4 to 10 years","Over 10 years"];
+const ORDER = ["Software Developers","Lawyers","Elementary School Teachers","Emergency Medicine Physicians","Personal Care Aides","Dishwashers"];
+const SHORT = {"Software Developers":"Developers","Elementary School Teachers":"Teachers","Emergency Medicine Physicians":"EM physicians","Personal Care Aides":"Care aides"};
+let filterOcc = null;
+const isVis = n => !n.hidden && (!filterOcc || n.occ === filterOcc);
+/* what each story step shows: dot opacity per region, circle opacity, visible labels, a pinned example */
+/* a: dot opacity per region · d: dots at all · cS / sF / cO: TaskNet outline, TaskNet fill, O*NET circle
+   dash: TaskNet drawn as a dashed outline (the work as people do it) · names: labels show names, not counts
+   theme / themeName: light up only the New tasks coded with that theme (the paper's codebook), and count them in the New label */
+/* how the Overlap step shows refinement, to compare: ?refine=light | pair | fan
+   light: the 58 refining statements stay bright, with their texts as callouts
+   pair:  the same, each callout giving the O*NET task above the TaskNet statement that refines it
+   fan:   one broad O*NET task at a time, with lines out to every TaskNet statement that refines it */
+const REFINE = ["light", "pair", "fan"].includes(new URLSearchParams(location.search).get("refine")) ? new URLSearchParams(location.search).get("refine") : "fan";
+const STEPS = {
+  onet:    {a:{L:0, X:0, R:1, H:1},      d:1, callouts:"O", sPos:0, cS:0, sF:0, cO:1, dash:false, names:true,  labels:["O"],         pin:null},
+  work:    {a:{L:.55, X:0, R:1, H:1},    d:1, sPos:1, cS:1, sF:0, cO:1, dash:true,  names:true,  labels:["O"],         pin:null},
+  intro:   {a:{L:.55, X:0, R:1, H:1},    d:1, sPos:1, cS:1, sF:1, cO:1, dash:false, names:true,  labels:["S","O"],     pin:null},
+  tasks:   {a:{L:1, X:1, R:1, H:0},      d:1, cS:1, sF:1, cO:1, dash:false, names:false, labels:["L","X","R"], pin:null},
+  coord:   {a:{L:.45, X:.15, R:.15},     d:1, theme:"coordination", themeName:"Coordination", callouts:["S-EMP-36","S-SWD-35"], cS:1, sF:1, cO:1, dash:false, names:false, labels:["L"], pin:null},
+  teach:   {a:{L:.45, X:.15, R:.15},     d:1, theme:"teaching_pd", themeName:"Teaching", callouts:["S-TCH-36","S-PCA-35","S-LAW-25","S-PCA-23"], cS:1, sF:1, cO:1, dash:false, names:false, labels:["L"], pin:null},
+  oversee: {a:{L:.45, X:.15, R:.15},     d:1, theme:"oversight_qa", themeName:"Oversight", callouts:["S-LAW-23","S-SWD-42","S-SWD-22"], cS:1, sF:1, cO:1, dash:false, names:false, labels:["L"], pin:null},
+  tech:    {a:{L:.45, X:.15, R:.15},     d:1, theme:"new_technology", themeName:"Technology", callouts:["S-TCH-38","S-SWD-24","S-SWD-28","S-SWD-33","S-SWD-25"], cS:1, sF:1, cO:1, dash:false, names:false, labels:["L"], pin:null},
+  linked:  {a:{L:.25, X:1, R:.25},       d:1, refine:true, callouts:REFINE === "fan" ? null : "F", cS:1, sF:1, cO:1, dash:false, names:false, labels:["X"],         pin:null},
+  gaps:    {a:{L:.25, X:.25, R:1},       d:1, callouts:"R", cS:1, sF:1, cO:1, dash:false, names:false, labels:["X","L","R"], pin:null},
+  explore: {a:{L:1, X:1, R:1},           d:1, cS:1, sF:1, cO:1, dash:false, names:false, labels:["X","L","R"], pin:"S-SWD-11"},   /* embedded at the top of the dashboard */
+};
+let scene = STEPS.onet, interactive = false, cS = 0, sF = 0, cO = 1, dots = 1, sPos = 0;
+/* a load that lands past the first step (a refresh, say) shows that step as it stands, without replaying its drawing-on */
+let booting = true, snap = false;
+let R_DOT = 2.6;                              /* logical radius, recomputed from DOT_PX on resize */
+
+const canvas = $("venn"), ctx = canvas.getContext("2d"), stage = $("stage"), detail = $("detail");
+let nodes = [], byId = new Map(), G = null, W = 600, H = 420, scale = 1, dpr = 1;
+let hover = null, selected = null;
+const pointer = {x:0, y:0, active:false, type:"mouse"};
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* ---------------- CSV ---------------- */
+function parseCSV(text){
+  const rows = []; let row = [], f = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i+1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+    else if (c === '"') q = true;
+    else if (c === ",") { row.push(f); f = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i+1] === "\n") i++;
+      row.push(f); f = "";
+      if (row.length > 1 || row[0] !== "") rows.push(row);
+      row = [];
+    } else f += c;
+  }
+  if (f !== "" || row.length) { row.push(f); rows.push(row); }
+  if (!rows.length) return [];
+  const head = rows.shift().map(h => h.trim().replace(/^﻿/, ""));
+  return rows.map(r => Object.fromEntries(head.map((h, i) => [h, (r[i] ?? "").trim()])));
+}
+
+/* ---------------- model: middle = any TaskNet ↔ O*NET link (refines or overlaps), matching the paper ---------------- */
+function build(dataRows, relRows){
+  nodes = dataRows.filter(r => r.id).map(r => {
+    const n = {id:r.id, inv:/^o\*net$/i.test(r.inventory) ? "O" : "S", occ:r.occupation || "Unassigned", soc:r.soc || "", text:r.statement, links:[], rel:new Map(), m:{}, themes:(r.themes || "").split(";").filter(Boolean)};
+    for (const c of NUM) n.m[c] = parseFloat(r[c]);
+    return n;
+  });
+  byId = new Map(nodes.map(n => [n.id, n]));
+  for (const r of relRows) {
+    const s = byId.get(r.sonet_id), o = byId.get(r.onet_id);
+    if (!s || !o || s.inv !== "S" || o.inv !== "O" || s.links.includes(o)) continue;
+    const rel = /refin|subtask/i.test(r.relation) ? "refines" : "overlaps";
+    s.links.push(o); o.links.push(s); s.rel.set(o, rel); o.rel.set(s, rel);
+  }
+  for (const n of nodes) {
+    /* the middle holds only linked TaskNet statements; linked O*NET tasks are hidden (no dot) */
+    n.hidden = n.inv === "O" && n.links.length > 0;
+    n.region = n.hidden ? "H" : n.links.length ? "X" : n.inv === "S" ? "L" : "R";
+    n.links.sort((a, b) => (n.rel.get(a) === "refines" ? 0 : 1) - (n.rel.get(b) === "refines" ? 0 : 1));
+  }
+  for (const n of nodes) n.refining = n.inv === "S" && [...n.rel.values()].includes("refines");
+  renderChips();
+  layout();
+  readColors();
+  resize();
+}
+
+/* ---------------- area-proportional Venn + jittered hex packing ---------------- */
+function lensArea(r1, r2, d){
+  if (d >= r1 + r2) return 0;
+  if (d <= Math.abs(r1 - r2)) return Math.PI * Math.min(r1, r2) ** 2;
+  const a1 = r1*r1*Math.acos((d*d + r1*r1 - r2*r2)/(2*d*r1));
+  const a2 = r2*r2*Math.acos((d*d + r2*r2 - r1*r1)/(2*d*r2));
+  const a3 = 0.5*Math.sqrt((-d+r1+r2)*(d+r1-r2)*(d-r1+r2)*(d+r1+r2));
+  return a1 + a2 - a3;
+}
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+
+function layout(){
+  const cnt = {L:0, X:0, R:0, H:0};
+  for (const n of nodes) cnt[n.region]++;
+  /* two equal circles overlapping like the paper's figure; R grows until the overlap holds its dots at STEP spacing */
+  const cells = (k, step, seed) => {
+    const out = [], rnd = mulberry32(seed), dy = step*Math.sqrt(3)/2, {R1, R2, CA, CB} = G;
+    for (let j = 0, y = CA.y - R1; y <= CA.y + R1; j++, y += dy) {
+      for (let x = PAD + (j % 2 ? step/2 : 0); x <= W - PAD; x += step) {
+        const p = {x:x + (rnd() - 0.5)*step*0.45, y:y + (rnd() - 0.5)*step*0.45};
+        const dA = Math.hypot(p.x - CA.x, p.y - CA.y), dB = Math.hypot(p.x - CB.x, p.y - CB.y);
+        const m = k === "X" ? Math.min(R1 - dA, R2 - dB) : k === "L" ? Math.min(R1 - dA, dB - R2) : Math.min(dA - R1, R2 - dB);
+        if (m > 0) out.push({...p, m});
+      }
+    }
+    return out.sort((p, q) => q.m - p.m);
+  };
+  /* the cnt most interior cells, if they all keep a clear margin from the region's edges */
+  const fit = (k, step, seed) => { const c = cells(k, step, seed).slice(0, cnt[k]); return c.length === cnt[k] && (!cnt[k] || c[cnt[k] - 1].m >= step*0.6) ? c : null; };
+  const place = R => {
+    const d = 0.84*R;
+    G = {R1:R, R2:R, d, CA:{x:PAD + R, y:TOP + R}, CB:{x:PAD + R + d, y:TOP + R}};
+    W = Math.round(2*PAD + 2*R + d); H = Math.round(TOP + 2*R + BOT);
+  };
+  let R = 60, chosen = {};
+  for (; R < 2000; R *= 1.03) { place(R); if ((chosen.X = fit("X", STEP, 7))) break; }
+  /* scatter each region's dots so they look random but never clump:
+     1. best-candidate sampling: each new dot tries 30 random spots and keeps the one farthest from the dots already placed;
+     2. relaxation: dots closer than the region's natural spacing push apart, staying inside the region. */
+  const clear = (p, k) => {
+    const dA = Math.hypot(p.x - G.CA.x, p.y - G.CA.y), dB = Math.hypot(p.x - G.CB.x, p.y - G.CB.y);
+    return k === "X" ? Math.min(G.R1 - dA, G.R2 - dB) : k === "L" ? Math.min(G.R1 - dA, dB - G.R2) : Math.min(dA - G.R1, G.R2 - dB);
+  };
+  const pick = mulberry32(17), x0 = PAD, x1 = W - PAD, y0 = G.CA.y - G.R1, y1 = G.CA.y + G.R1;
+  G.clear = clear; G.margin = {}; G.sp = {};
+  for (const k of ["L","X","R","H"]) {
+    if (!cnt[k]) { chosen[k] = []; continue; }
+    const wk = k === "H" ? "X" : k;            /* linked O*NET tasks share the overlap's walls */
+    /* the region's area (sampled on a 2px grid) gives its natural spacing; the edge margin scales with it */
+    let area = 0;
+    for (let y = y0; y < y1; y += 2) for (let x = x0; x < x1; x += 2) if (clear({x, y}, wk) > 0) area += 4;
+    const sp = Math.sqrt(area / cnt[k] / (Math.sqrt(3)/2)), margin = Math.max(R_DOT*2, sp*0.4);
+    const pts = [];
+    while (pts.length < cnt[k]) {
+      let best = null, bd = -1;
+      for (let c = 0, tries = 0; c < 30 && tries < 20000; tries++) {
+        const p = {x:x0 + pick()*(x1 - x0), y:y0 + pick()*(y1 - y0)};
+        if (clear(p, wk) < margin) continue;
+        c++;
+        let d = Infinity;
+        for (const q of pts) d = Math.min(d, (p.x - q.x) ** 2 + (p.y - q.y) ** 2);
+        if (d > bd) { bd = d; best = p; }
+      }
+      if (!best) break;
+      pts.push(best);
+    }
+    const near = sp*0.85;
+    for (let it = 0; it < 60; it++) {
+      for (let a = 0; a < pts.length; a++) for (let b = a + 1; b < pts.length; b++) {
+        const p = pts[a], q = pts[b], dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy) || 0.01;
+        if (d >= near) continue;
+        const f = (near - d) * 0.25 / d;
+        const np = {x:p.x - dx*f, y:p.y - dy*f}, nq = {x:q.x + dx*f, y:q.y + dy*f};
+        if (clear(np, wk) >= margin) { p.x = np.x; p.y = np.y; }
+        if (clear(nq, wk) >= margin) { q.x = nq.x; q.y = nq.y; }
+      }
+    }
+    chosen[k] = pts; G.margin[k] = margin; G.sp[k] = sp;
+  }
+
+  /* scatter each region's dots over its cells; in the overlap, TaskNet sits left of O*NET */
+  const shuffle = mulberry32(5);
+  for (const k of ["L","X","R","H"]) {
+    const list = nodes.filter(n => n.region === k).sort((a, b) => (a.inv === "S" ? 0 : 1) - (b.inv === "S" ? 0 : 1) || a.id.localeCompare(b.id));
+    const spots = k === "X" ? chosen[k].sort((p, q) => p.x - q.x) : chosen[k].map(p => [shuffle(), p]).sort((a, b) => a[0] - b[0]).map(e => e[1]);
+    list.forEach((n, j) => { n.hx = spots[j].x; n.hy = spots[j].y; });
+  }
+  const rnd = mulberry32(3);
+  for (const n of nodes) {
+    n.x = n.hx; n.y = n.hy; n.vx = n.vy = 0; n.r = R_DOT;
+    n.rv = 0; n.cr = 0;
+    n.ph = [0,1,2,3].map(() => rnd()*Math.PI*2); n.f = 0.45 + rnd()*0.45;
+    n.few = rnd() < 0.42;   /* the share that pops up while work changes */
+  }
+  /* pop-ins come a few at a time: each region's dots are shuffled into small batches, one batch every POP_GAP seconds */
+  for (const k of ["L", "X"]) nodes.filter(n => n.region === k).map(n => [rnd(), n]).sort((a, b) => a[0] - b[0])
+    .forEach(([, n], j) => { n.delay = Math.floor(j/POP_BATCH[k])*POP_GAP + rnd()*0.2; });
+}
+
+/* ---------------- colour ---------------- */
+let C = {};
+function readColors(){
+  const s = getComputedStyle(document.documentElement);
+  for (const k of ["ink","muted","s","o","bg","s-fill","o-fill","x-fill","s-line","o-line","s-ink","o-ink"]) C[k] = s.getPropertyValue("--" + k).trim();
+  for (const n of nodes) n.color = n.inv === "S" ? C.s : C.o;
+}
+
+/* ---------------- sizing + region labels ---------------- */
+function resize(){
+  if (!G) return;
+  const w = stage.clientWidth;
+  const st = getComputedStyle(stage), room = stage.clientHeight - parseFloat(st.paddingTop) - parseFloat(st.paddingBottom);
+  scale = Math.min(w / W, Math.max(200, room) / H); dpr = devicePixelRatio || 1;
+  R_DOT = clamp(DOT_PX / scale, 3, 8);
+  canvas.style.width = W*scale + "px"; canvas.style.height = H*scale + "px";
+  canvas.width = Math.round(W*scale*dpr); canvas.height = Math.round(H*scale*dpr);
+  const cnt = k => nodes.filter(n => n.region === k && isVis(n)).length;
+  const left = (w - W*scale)/2;
+  const pos = {L:(G.CA.x - G.R1 + G.CB.x - G.R2)/2, X:(G.CB.x - G.R2 + G.CA.x + G.R1)/2, R:(G.CA.x + G.R1 + G.CB.x + G.R2)/2, S:G.CA.x - G.R1*0.35, O:G.CB.x + G.R2*0.35*scene.cS};   /* names sit over the outer part of each circle once both are shown */
+  const total = inv => nodes.filter(n => n.inv === inv && (!filterOcc || n.occ === filterOcc)).length;
+  for (const k of ["L","X","R","S","O"]) {
+    const el = $("reg-" + k);
+    const named = scene.names && (k === "S" || k === "O");
+    const span = el.querySelector("span"), themed = k === "L" && scene.theme, refined = k === "X" && scene.refine;
+    span.dataset.name ??= span.textContent;
+    el.querySelector("b").textContent = named ? (k === "S" ? "TaskNet" : "O*NET") : k === "S" ? total("S") : k === "O" ? total("O")
+      : themed ? nodes.filter(n => n.region === "L" && isVis(n) && n.themes.includes(scene.theme)).length
+      : refined ? nodes.filter(n => n.region === "X" && isVis(n) && n.refining).length : cnt(k);
+    span.textContent = themed ? scene.themeName : refined ? "Refine" : span.dataset.name;
+    span.style.display = named ? "none" : "";
+    el.style.left = clamp(left + pos[k]*scale - el.offsetWidth/2, 0, Math.max(0, w - el.offsetWidth)) + "px";
+  }
+  const tall = Math.max(...["L","X","R","S","O"].map(k => $("reg-" + k).offsetHeight));
+  for (const k of ["L","X","R","S","O"]) $("reg-" + k).style.top = canvas.offsetTop + (G.CA.y - Math.max(G.R1, G.R2))*scale - tall - 16 + "px";
+}
+new ResizeObserver(resize).observe(stage);
+
+/* ---------------- occupation filter ---------------- */
+function renderChips(){
+  const occs = [...new Set(nodes.map(n => n.occ))].sort((a, b) => {
+    const ia = ORDER.indexOf(a), ib = ORDER.indexOf(b);
+    return ((ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)) || a.localeCompare(b);
+  });
+  const mk = (label, occ) => `<button class="chip" type="button" data-occ="${esc(occ)}" aria-pressed="${(filterOcc || "") === occ}" title="${esc(occ || "All occupations")}">${esc(label)}</button>`;
+  $("chips").innerHTML = mk("All", "") + occs.map(o => mk(SHORT[o] || o, o)).join("");
+}
+$("chips").addEventListener("click", e => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  filterOcc = b.dataset.occ || null;
+  for (const c of $("chips").children) c.setAttribute("aria-pressed", String((filterOcc || "") === c.dataset.occ));
+  if (selected && !isVis(selected)) selected = null;
+  shown = undefined;
+  resize();
+});
+addEventListener("resize", resize);
+
+/* ---------------- interaction ---------------- */
+function toLogical(e){
+  const r = canvas.getBoundingClientRect();
+  pointer.x = (e.clientX - r.left) / scale; pointer.y = (e.clientY - r.top) / scale;
+  pointer.type = e.pointerType || "mouse";
+}
+/* hit-test on home positions, as the original did: a target never slips away while its neighbours are shoved aside */
+function pick(x, y){
+  let best = null, bd = Infinity;
+  for (const n of nodes) { if (!isVis(n)) continue; const d = Math.hypot(x - n.hx, y - n.hy); if (d < bd) { bd = d; best = n; } }
+  return bd < Math.max(STEP*1.1, 12/scale) ? best : null;
+}
+canvas.addEventListener("pointermove", e => { toLogical(e); pointer.active = true; hover = interactive ? pick(pointer.x, pointer.y) : null; canvas.style.cursor = hover ? "pointer" : "default"; });
+canvas.addEventListener("pointerleave", () => { pointer.active = false; hover = null; });
+canvas.addEventListener("pointercancel", () => { pointer.active = false; hover = null; });   /* a touch that turned into a scroll */
+canvas.addEventListener("click", e => { if (!interactive) return; toLogical(e); const n = pick(pointer.x, pointer.y); selected = n && n !== selected ? n : null; });
+canvas.addEventListener("keydown", e => {
+  if (!interactive) return;
+  if (e.key === "Escape") { selected = null; keep = null; return; }
+  const dir = (e.key === "ArrowRight" || e.key === "ArrowDown") ? 1 : (e.key === "ArrowLeft" || e.key === "ArrowUp") ? -1 : 0;
+  if (!dir) return;
+  e.preventDefault();
+  const list = nodes.filter(isVis).sort((a, b) => a.hx - b.hx || a.hy - b.hy);
+  const i = selected ? list.indexOf(selected) : (dir > 0 ? -1 : 0);
+  selected = list[(i + dir + list.length) % list.length];
+});
+
+/* ---------------- physics, after the original page: every dot springs to a home spot that drifts faintly.
+   The hovered or pinned dot swells with a springy overshoot and, being immovable, elbows its neighbours aside;
+   they ripple outward and settle back once it shrinks. Circle edges stay walls. No reaction to the cursor itself. ---------------- */
+const K = 0.014, DAMP = reduceMotion ? 0.8 : 0.9, DRIFT = reduceMotion ? 0 : 2.3;   /* DRIFT: a faint wander of each home spot, logical px */
+const GROW = {hover:2.0, selected:2.6};                        /* how far the focused dot's bubble swells */
+const heavy = n => n === hover || n === selected;
+/* inward normal of the region wall a point is closest to, and how deep inside it is */
+function wall(p, k){
+  const dA = Math.hypot(p.x - G.CA.x, p.y - G.CA.y) || 1e-6, dB = Math.hypot(p.x - G.CB.x, p.y - G.CB.y) || 1e-6;
+  const inA = {d:G.R1 - dA, nx:(G.CA.x - p.x)/dA, ny:(G.CA.y - p.y)/dA}, outA = {d:dA - G.R1, nx:(p.x - G.CA.x)/dA, ny:(p.y - G.CA.y)/dA};
+  const inB = {d:G.R2 - dB, nx:(G.CB.x - p.x)/dB, ny:(G.CB.y - p.y)/dB}, outB = {d:dB - G.R2, nx:(p.x - G.CB.x)/dB, ny:(p.y - G.CB.y)/dB};
+  const [a, b] = k === "X" ? [inA, inB] : k === "L" ? [inA, outB] : [outA, inB];
+  return a.d < b.d ? a : b;
+}
+function step(t){
+  const live = nodes;
+  for (const n of live) {
+    /* drawn radius eases; the collision bubble (about half the region's spacing) swells with a springy overshoot */
+    n.r += (R_DOT * (n === selected ? 2.4 : n === hover ? 1.9 : 1) - n.r) * 0.2;
+    const base = G.sp[n.region]*0.45, ct = base * (n === selected ? GROW.selected : n === hover ? GROW.hover : 1);
+    if (!n.cr) n.cr = base;
+    n.rv = (n.rv + (ct - n.cr) * 0.22) * 0.62; n.cr += n.rv;
+    if (heavy(n)) { n.vx = n.vy = 0; continue; }
+    /* the spring pulls toward a home spot that wanders slowly on an irregular loop */
+    const [a, b, c, d] = n.ph, tx = n.hx + DRIFT*(0.65*Math.sin(t*n.f + a) + 0.35*Math.sin(t*n.f*2.3 + b)), ty = n.hy + DRIFT*(0.65*Math.cos(t*n.f*0.83 + c) + 0.35*Math.cos(t*n.f*1.9 + d));
+    n.vx = (n.vx + K*(tx - n.x)) * DAMP; n.vy = (n.vy + K*(ty - n.y)) * DAMP;
+  }
+  for (const n of live) if (!heavy(n)) { n.x += n.vx; n.y += n.vy; }
+  /* collisions between bubbles; the focused dot is immovable, so it does all the pushing */
+  for (let a = 0; a < live.length; a++) {
+    const p = live[a];
+    for (let b = a + 1; b < live.length; b++) {
+      const q = live[b];
+      if (q.region !== p.region) continue;
+      const dx = q.x - p.x, dy = q.y - p.y, min = p.cr + q.cr, d2 = dx*dx + dy*dy;
+      if (d2 >= min*min) continue;
+      const d = Math.sqrt(d2) || 0.01, o = min - d, nx = dx/d, ny = dy/d;
+      const hp = heavy(p), hq = heavy(q);
+      if (hp && hq) continue;
+      const wp = hp ? 0 : hq ? 1 : 0.5, wq = 1 - wp;
+      p.x -= nx*o*wp*0.5; p.y -= ny*o*wp*0.5; q.x += nx*o*wq*0.5; q.y += ny*o*wq*0.5;
+      p.vx -= nx*o*wp*0.06; p.vy -= ny*o*wp*0.06; q.vx += nx*o*wq*0.06; q.vy += ny*o*wq*0.06;
+    }
+  }
+  /* keep every dot inside its own region */
+  for (const n of live) {
+    if (heavy(n)) continue;
+    const wk = n.region === "H" ? "X" : n.region, w = wall(n, wk), m = G.margin[n.region];
+    if (w.d < m) {
+      const vn = n.vx*w.nx + n.vy*w.ny;
+      if (vn < 0) { n.vx -= vn*w.nx; n.vy -= vn*w.ny; }
+      n.x += w.nx*(m - w.d); n.y += w.ny*(m - w.d);
+    }
+  }
+}
+
+/* ---------------- drawing ---------------- */
+let dim = 0, shift = 0;
+/* hand-drawn look: each circle is traced a little off true, and a paper grain is rubbed out of everything drawn.
+   Like stop-motion, the wobble and the grain "boil": they redraw a few times a second, on a loop of four frames.
+   `upto` draws only the first part of the circle, so an outline can be traced on like a pen going round. */
+let boil = 0;
+function rough(c, r, seed, upto = 1){
+  const s = seed + boil*1.3, a0 = -2.2 + seed*0.4, N = Math.max(2, Math.ceil(120*upto));
+  ctx.beginPath();
+  for (let i = 0; i <= N; i++) {
+    const a = a0 + i/120*Math.PI*2, k = 1 + 0.004*Math.sin(3*a + s) + 0.003*Math.sin(5*a + s*2.1) + 0.0015*Math.sin(11*a + s*3.7);
+    const x = c.x + Math.cos(a)*r*k, y = c.y + Math.sin(a)*r*k;
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  if (upto >= 1) ctx.closePath();
+}
+const trace = [0, 0];                         /* how far round each outline the pen has gone */
+const grain = (() => {
+  const s = document.createElement("canvas"), g = document.createElement("canvas");
+  s.width = s.height = 128; g.width = g.height = 256;
+  const sx = s.getContext("2d"), d = sx.createImageData(128, 128);
+  for (let i = 3; i < d.data.length; i += 4) d.data[i] = Math.random() < 0.55 ? Math.random()*110 : 0;
+  sx.putImageData(d, 0, 0);
+  const gx = g.getContext("2d"); gx.imageSmoothingEnabled = true; gx.drawImage(s, 0, 0, 256, 256);
+  return ctx.createPattern(g, "repeat");
+})();
+function dot(n, k = 1){
+  ctx.fillStyle = n.color;
+  ctx.beginPath(); ctx.arc(n.x, n.y, n.r*k, 0, Math.PI*2); ctx.fill();
+}
+/* a dot popping in grows smoothly over DAB_T seconds, just past full size and back, with tick marks flicking out as it lands.
+   They come POP_BATCH at a time, a batch every POP_GAP seconds, once the outlines have finished drawing. */
+const DAB_T = 1.3, POP_GAP = 0.2, POP_BATCH = {L:4, X:8};
+let popT0 = null;
+/* fade: the dot simply fades in where it sits */
+function popFade(n, born){ ctx.globalAlpha *= clamp(born/POPS.fade.T, 0, 1); dot(n); }
+/* New dots fade in; Overlap dots grow in (dab) */
+const POPS = {fade:{T:0.5, f:popFade}, dab:{T:DAB_T, f:dab}};
+const pop = "fade";
+function dab(n, born, lw){
+  const u = clamp(born/DAB_T, 0, 1);
+  dot(n, 1 + 1.6*(u - 1)**3 + 0.6*(u - 1)**2);    /* ease out with a slight overshoot: 0 at the start, 1 at the end */
+  if (u < 0.5 || u > 0.9) return;
+  const v = (u - 0.5)/0.4, rnd = mulberry32(Math.floor(n.hx*1000)), a0 = rnd()*Math.PI*2;
+  const r0 = n.r*(1.7 + 0.8*v), r1 = r0 + Math.max(n.r*1.1, 3*lw);
+  ctx.strokeStyle = n.color; ctx.lineWidth = 1.1*lw; ctx.lineCap = "round"; ctx.globalAlpha *= 0.75*Math.sin(Math.PI*v);
+  ctx.beginPath();
+  for (let i = 0; i < 3; i++) {
+    const a = a0 + i*Math.PI*2/3 + (rnd() - 0.5)*0.6;
+    ctx.moveTo(n.x + Math.cos(a)*r0, n.y + Math.sin(a)*r0); ctx.lineTo(n.x + Math.cos(a)*r1, n.y + Math.sin(a)*r1);
+  }
+  ctx.stroke();
+}
+function draw(){
+  ctx.setTransform(dpr*scale, 0, 0, dpr*scale, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  if (!G) return;
+  const lw = 1/scale, focus = selected || hover;
+  boil = reduceMotion ? 0 : Math.floor(performance.now()/125) % 4;
+  dim += ((focus && interactive ? 1 : 0) - dim) * 0.12;
+  const snapping = snap;
+  if (snap) { snap = false; sPos = scene.sPos ?? 1; cS = scene.cS; sF = scene.sF; cO = scene.cO; dots = scene.d; trace[0] = cS; trace[1] = cO; popT0 = performance.now() - 1e5; }
+  sPos += ((scene.sPos ?? 1) - sPos) * 0.035;
+  cS += (scene.cS - cS) * 0.08; sF += (scene.sF - sF) * 0.08; cO += (scene.cO - cO) * 0.08; dots += (scene.d - dots) * 0.06;
+  /* while O*NET is alone, slide the drawing so its circle sits in the centre */
+  shift = (W/2 - G.CB.x) * (1 - cS*sPos);
+  ctx.translate(shift, 0);
+  for (const k of ["L","X","R","S","O"]) $("reg-" + k).style.transform = `translateX(${shift*scale}px)`;
+  const lit = new Set();
+  /* during the story only the pinned example lights up; links appear once the reader explores */
+  for (const f of [selected, hover]) if (f) { lit.add(f); if (interactive) for (const l of f.links) if (!l.hidden) lit.add(l); }
+  for (const sl of slots) if (sl.node && !interactive) lit.add(sl.node);
+  if (fan.node && !interactive) for (const c of fan.kids) lit.add(c);
+
+  /* the two sets: the paper's fills, a hairline outline in each inventory's colour */
+  const SA = {x:G.CB.x + (G.CA.x - G.CB.x)*sPos, y:G.CA.y};
+  const sets = [[SA, G.R1, C["s-line"], C["s-fill"]], [G.CB, G.R2, C["o-line"], C["o-fill"]]];
+  const ca = [cS, cO], fa = [sF, cO];
+  /* the pen traces each outline first; the colour is washed in once it is most of the way round */
+  for (const i of [0, 1]) trace[i] = reduceMotion ? ca[i] : trace[i] + (ca[i] - trace[i]) * 0.045;
+  const wash = i => clamp((trace[i] - 0.55)/0.45, 0, 1);
+  sets.forEach(([c, r, , fill], i) => { ctx.globalAlpha = fa[i]*wash(i); ctx.fillStyle = fill; rough(c, r, i*5 + 1); ctx.fill(); });
+  ctx.globalAlpha = sF*cO*Math.min(wash(0), wash(1)); ctx.save(); rough(SA, G.R1, 1); ctx.clip(); ctx.fillStyle = C["x-fill"]; rough(G.CB, G.R2, 6); ctx.fill(); ctx.restore();
+  ctx.lineWidth = 1.25*lw;
+  const t = Math.floor(performance.now()/125)/8;    /* animation time advances in steps, like drawings on twos */
+  sets.forEach(([c, r, col], i) => {
+    const alive = i === 0 && scene.dash && !reduceMotion;
+    ctx.strokeStyle = col;
+    ctx.setLineDash(i === 0 && scene.dash ? [6*lw, 5*lw] : []); ctx.lineWidth = (i === 0 && scene.dash ? 1.6 : 1.25)*lw;
+    ctx.lineDashOffset = alive ? -t*14*lw : 0;
+    /* two slightly different passes, like a pen going round twice */
+    if (trace[i] < 0.005) return;
+    for (const [seed, a] of [[i*5 + 2, 1], [i*5 + 3, 0.55]]) { ctx.globalAlpha = a; rough(c, alive ? r*(1 + 0.012*Math.sin(t*1.7)) : r, seed, trace[i]); ctx.stroke(); }
+  });
+  ctx.setLineDash([]); ctx.lineDashOffset = 0;
+
+  /* links for the focused dot: solid = refines, dashed = overlaps */
+  if (focus && interactive) {
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 1*lw; ctx.globalAlpha = 0.6;
+    for (const f of [selected, hover]) if (f) for (const l of f.links) {
+      if (l.hidden) continue;
+      ctx.setLineDash(f.rel.get(l) === "refines" ? [] : [3*lw, 2.5*lw]);
+      const mx = (f.x + l.x)/2, my = (f.y + l.y)/2 - Math.hypot(l.x - f.x, l.y - f.y)*0.18;
+      ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.quadraticCurveTo(mx, my, l.x, l.y); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+
+  /* pop-ins wait until the outlines have finished drawing */
+  if (popT0 === null && trace[0] >= cS - 0.01 && trace[1] >= cO - 0.01) popT0 = performance.now();
+  const popClock = popT0 === null ? -1 : (performance.now() - popT0)/1000;
+  for (const n of nodes) {
+    if (lit.has(n)) continue;
+    let target = n.hidden ? (scene.a.H || 0) : (isVis(n) || !interactive) ? scene.a[n.region] : 0.12;
+    if (scene.theme && n.region === "L") target = n.themes.includes(scene.theme) ? 1 : 0.15;
+    if (scene.refine && n.region === "X") target = n.refining ? 1 : 0.2;
+    const since = popClock - (n.delay || 0);
+    if (scene.pop && n.region === "L" && (since < 0 || (scene.few && !n.few))) target = 0;
+    /* stars: each dot of a twinkling region waits its turn, then is dabbed in */
+    const twinkle = !reduceMotion && scene.stars && scene.stars.includes(n.region);
+    const lit0 = popClock - (n.delay || 0);
+    if (twinkle && lit0 < 0) target = 0;
+    /* seconds since this dot's turn to pop in, while its dab is still playing */
+    const popping = scene.pop && n.region === "L" && !reduceMotion;
+    const born = target > 0 && (popping || twinkle) ? (popping ? since : lit0) : -1;
+    const anim = popping ? POPS[pop] : POPS.dab, dabbing = born >= 0 && born < anim.T;
+    n.a = dabbing || snapping ? target : (n.a ?? 0) + (target - (n.a ?? 0)) * (popping ? 0.2 : twinkle ? 0.12 : 0.08);
+    if (n.a < 0.005) continue;
+    ctx.globalAlpha = n.a * dots * (1 - (interactive ? 0 : 0.78)*dim);   /* in explore, other dots keep their full colour around the one in focus */
+    if (ctx.globalAlpha < 0.005) continue;
+    if (dabbing) anim.f(n, born, lw); else dot(n);
+  }
+  for (const n of lit) {
+    ctx.globalAlpha = 1;
+    dot(n);
+    /* callout dots are circled by their pen loop (see the callouts); a hovered or pinned dot gets a hand-drawn ring */
+    if ((n === selected || n === hover) && !slots.some(sl => sl.node === n)) {
+      ctx.strokeStyle = C.ink; ctx.lineWidth = 1.2*lw;
+      rough(n, n.r + 2.5*lw, n.hx); ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 1;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = "destination-out"; ctx.fillStyle = grain;
+  ctx.translate(-boil*67, -boil*41); ctx.fillRect(0, 0, canvas.width + 300, canvas.height + 300);
+  ctx.globalCompositeOperation = "source-over";
+}
+
+/* ---------------- detail card: hover previews, click pins ---------------- */
+const fin = v => Number.isFinite(v);
+const label = (arr, x) => fin(x) ? arr[clamp(Math.round(x), 1, arr.length) - 1] : "";
+function metric(name, value, frac, def, lo = "0%", hi = "100%"){
+  return `<div class="m"${def ? ` title="${esc(def)}"` : ""}><span class="m-l">${name}</span><span class="m-v">${fin(frac) ? value : "—"}</span>` +
+         `<span class="m-bar"><i style="width:${fin(frac) ? (clamp(frac, 0, 1)*100).toFixed(1) : 0}%"></i></span>` +
+         `<span class="m-ends"><span>${lo}</span><span>${hi}</span></span></div>`;
+}
+/* an ordered scale (frequency, duration, training): one block per step, filled up to the task's step, ends labelled */
+function stepped(name, x, short, full, lo, hi, def){
+  const n = short.length, k = fin(x) ? clamp(Math.round(x), 1, n) : 0;
+  return `<div class="m"${def ? ` title="${esc(def + (k ? full[k - 1] : ""))}"` : ""}><span class="m-l">${name}</span><span class="m-v">${k ? short[k - 1] : "—"}</span>` +
+         `<span class="m-steps" style="grid-template-columns:repeat(${n},1fr)">${Array.from({length:n}, (_, i) => `<i${i < k ? ' class="on"' : ""}></i>`).join("")}</span>` +
+         `<span class="m-ends"><span>${lo}</span><span>${hi}</span></span></div>`;
+}
+function scaled(name, x, n, lo, hi, def){
+  const ok = fin(x), v = ok ? clamp(x, 1, n) : 0;
+  const cell = i => { const f = clamp(v - i, 0, 1); return f >= 1 ? '<i class="on"></i>' : f > 0 ? `<i class="part" style="--p:${(f*100).toFixed(0)}%"></i>` : "<i></i>"; };
+  return `<div class="m"${def ? ` title="${esc(def)}"` : ""}><span class="m-l">${name}</span><span class="m-v">${ok ? x.toFixed(1) + " / " + n : "—"}</span>` +
+         `<span class="m-steps" style="grid-template-columns:repeat(${n},1fr)">${Array.from({length:n}, (_, i) => cell(i)).join("")}</span>` +
+         `<span class="m-ends"><span>${lo}</span><span>${hi}</span></span></div>`;
+}
+/* a task's O*NET (or TaskNet) counterparts, grouped by how they relate, each group named once */
+function linkGroups(n, other){
+  if (!n.links.length) return "";
+  const them = n.inv === "S" ? "O*NET" : "TaskNet", rel = l => n.rel.get(l) === "refines" ? "refines" : "overlaps";
+  const label = k => k === "refines" ? (n.inv === "S" ? "Refines" : "Refined by") + " " + them : "Overlaps " + them;
+  return `<div class="links">` + ["refines", "overlaps"].map(k => {
+    const ls = n.links.filter(l => rel(l) === k); if (!ls.length) return "";
+    return `<div class="lg"><p class="lg-h">${label(k)}</p><ul>` +
+      ls.map(l => `<li><button type="button"${l.hidden ? ' disabled style="cursor:default"' : ` data-id="${esc(l.id)}"`}><i style="background:${other}"></i><span>${esc(l.text)}</span></button></li>`).join("") + `</ul></div>`;
+  }).join("") + `</div>`;
+}
+let shown, keep = null;
+function renderDetail(n){
+  if (n === shown) return;
+  shown = n;
+  detail.classList.toggle("o", !!n && n.inv === "O");
+  detail.classList.toggle("empty", !n);
+  if (!n) { detail.innerHTML = `<p class="d-hint">Hover a dot to see its task</p>`; return; }
+  const m = n.m, other = n.inv === "S" ? "var(--o)" : "var(--s)";
+  const relName = l => n.rel.get(l) === "refines" ? (n.inv === "S" ? "Refines" : "Refined by") : "Related";
+  const pct = v => fin(v) ? Math.round(v*100) + "%" : "";
+  const onet = n.inv === "O";   /* O*NET tasks: only the ratings O*NET itself publishes */
+  detail.innerHTML =
+    `<div class="d-main"><div class="d-meta"><i></i>${n.inv === "S" ? "TaskNet" : "O*NET"} · ${esc(n.occ)}` +
+      `</div>` +
+    `<p class="d-text">${esc(n.text)}</p>` +
+    linkGroups(n, other) + `</div>` +
+    `<div class="metrics">` +
+      metric("Relevance", pct(m.relevance), m.relevance, "Share of workers who say the task belongs to their occupation, not just their own role") +
+      scaled("Importance", m.importance, 5, "Not important", "Extremely", "How important the task is to the occupation, averaged on O*NET's scale from 1 (not important) to 5 (extremely important)") +
+      stepped("Frequency", m.frequency, FREQ_S, FREQ, "Yearly", "Hourly", onet ? "O*NET frequency, from its incumbent survey. Nearest step: " : "How often a worker typically does the task. Nearest step: ") +
+      (onet ? "" : metric("Top-worker gap", pct(m.top_worker_gap), m.top_worker_gap, "Share of workers who say a top performer (the best 10% in the same setting) clearly does the task better than an average worker")) +
+      (onet ? "" : stepped("Duration", m.duration, DUR_S, DUR, "<15 min", "4+ days", "How long one round of the task takes. Nearest step: ")) +
+      (onet ? "" : metric("Articulability", pct(m.articulability), m.articulability, "Share who say the standard for doing the task well can be clearly stated in advance. Low values point to tacit know-how")) +
+      (onet ? "" : stepped("Training", m.training_svp, SVP_S, SVP, "A demo", "10+ years", "On-the-job and classroom training needed to do the task well. Nearest step: ")) +
+      (onet ? "" : metric("Verifiability", pct(m.verifiability), m.verifiability, "Share who say a trained coworker could check whether the task was done correctly")) +
+      (onet ? `<p class="m-note">O*NET publishes relevance, importance and frequency for its tasks.</p>` : "") +
+      `<button type="button" class="m-key" id="m-key">What do these ratings mean? ↓</button>` +
+    `</div>`;
+}
+detail.addEventListener("click", e => {
+  if (e.target.closest("#m-key")) { parent.postMessage({tasknetShow: "ratings"}, "*"); return; }
+  const b = e.target.closest("[data-id]");
+  if (b) { selected = byId.get(b.dataset.id) || null; return; }
+});
+
+let last = performance.now(), acc = 0;
+function frame(now){
+  acc = Math.min(acc + (now - last), 100); last = now;
+  while (acc >= 1000/60) { if (G) step(now/1000); acc -= 1000/60; }
+  if (hover || selected) keep = hover || selected;
+  else if (keep && !isVis(keep)) keep = null;
+  draw(); placeCallout(); placeFan(); renderDetail(hover || selected || keep);
+  requestAnimationFrame(frame);
+}
+
+/* highlighter swipes: bold words in a step are swiped one after another */
+for (const p of document.querySelectorAll(".step p")) [...p.querySelectorAll("b")].forEach((b, i) => b.style.setProperty("--i", i));
+/* the CSVs are embedded above, so the page works when opened straight from disk */
+build(parseCSV($("embedded-data").textContent.replace(/^\n/, "")), parseCSV($("embedded-relationships").textContent.replace(/^\n/, "")));
+/* ---------------- scroll and tell: the step crossing the middle of the screen drives the Venn ---------------- */
+for (const q of document.querySelectorAll("[data-quote]")) {
+  const n = byId.get(q.dataset.quote);
+  if (n) q.innerHTML = `${esc(n.text)}<cite>${n.inv === "S" ? "TaskNet" : "O*NET"} · ${esc(n.occ)}</cite>`;
+}
+/* ---------------- callouts, after the paper's figure ----------------
+   Tasks take turns: a new one appears every SPAWN ms and stays LIFE ms, so about two are on screen.
+   Each lands in a lane not already in use (beside the Venn on its dot's side, or above/below it),
+   joined to its dot by a hand-drawn, squiggly leader line. */
+const lead = $("lead"), calloutBox$ = $("callouts"), SVG = "http://www.w3.org/2000/svg";
+const SPAWN = 2200, LIFE = 4600, FADE = 450;
+const slots = [0,1,2].map(() => {
+  const g = document.createElementNS(SVG, "g"), ring = document.createElementNS(SVG, "path"), path = document.createElementNS(SVG, "path"), head = document.createElementNS(SVG, "path");
+  ring.setAttribute("class", "ring"); path.setAttribute("class", "line");
+  for (const e of [ring, path]) e.setAttribute("pathLength", "1");
+  head.setAttribute("class", "head"); head.setAttribute("pathLength", "1"); g.append(ring, path, head); lead.append(g);
+  const el = document.createElement("div"); el.className = "callout"; calloutBox$.append(el);
+  return {g, ring, path, head, el, node:null, box:null, seed:0, timers:[]};
+});
+let pool = [], poolAt = 0, spawnTimers = [], lastAng = null, curated = false;
+function dotOnStage(n){
+  return {x:(stage.clientWidth - W*scale)/2 + (n.x + shift)*scale, y:canvas.offsetTop + n.y*scale};
+}
+function vennExtent(){
+  const left = (stage.clientWidth - W*scale)/2, sa = G.CB.x + (G.CA.x - G.CB.x)*sPos;
+  const l = cS > 0.5 ? Math.min(sa - G.R1, G.CB.x - G.R2) : G.CB.x - G.R2, r = G.CB.x + G.R2;
+  return {l:left + (l + shift)*scale, r:left + (r + shift)*scale, cx:left + ((l + r)/2 + shift)*scale,
+          top:canvas.offsetTop + (G.CA.y - Math.max(G.R1, G.R2))*scale, bottom:canvas.offsetTop + (G.CA.y + Math.max(G.R1, G.R2))*scale};
+}
+/* the circles on screen right now, in stage pixels */
+function visibleCircles(){
+  const left = (stage.clientWidth - W*scale)/2, top = canvas.offsetTop, sa = G.CB.x + (G.CA.x - G.CB.x)*sPos;
+  const out = [{x:left + (G.CB.x + shift)*scale, y:top + G.CB.y*scale, r:G.R2*scale}];
+  if (cS > 0.5 && sF > 0.5) out.push({x:left + (sa + shift)*scale, y:top + G.CA.y*scale, r:G.R1*scale});
+  return out;
+}
+/* where a callout for this dot would sit: straight out from the Venn's centre through the dot, just past the edge.
+   Returns null when the text would hit labels, story text, the page edge or another callout. */
+const MAX_INSIDE = Infinity, OUT = 50;   /* any dot can get a callout; its line runs straight out from the centre, so it never crosses the whole Venn */
+function radialBox(n, el, others){
+  const d = dotOnStage(n), circles = visibleCircles(), v = vennExtent();
+  if (innerWidth <= 900) {
+    if (others.some(Boolean)) return null;                /* one caption at a time on phones */
+    const w = Math.min(stage.clientWidth - 16, 320); el.style.width = w + "px";
+    const h = el.offsetHeight, x = (stage.clientWidth - w)/2, y = v.bottom + 16;
+    if (y + h > stage.clientHeight - 2) return null;
+    return {x, y, w, h, align:"center", ex:clamp(d.x, x + 12, x + w - 12), ey:y - 5, ang:Math.PI/2};
+  }
+  const c = {x:v.cx, y:(v.top + v.bottom)/2};
+  let dx = d.x - c.x, dy = d.y - c.y; const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
+  const inside = p => circles.some(k => Math.hypot(p.x - k.x, p.y - k.y) < k.r);
+  let t = 0;
+  while (t < 400 && inside({x:d.x + dx*t, y:d.y + dy*t})) t += 2;
+  if (t > MAX_INSIDE) return null;
+  const a = {x:d.x + dx*(t + OUT), y:d.y + dy*(t + OUT)};
+  const w = 200; el.style.width = w + "px";
+  const h = el.offsetHeight;
+  let x, y, align;
+  /* the text starts a little past the end of the line */
+  if (dx < -0.4)      { x = a.x - w - 9; y = a.y - (dy < 0 ? h - 12 : 10); align = "right"; }
+  else if (dx > 0.4)  { x = a.x + 9;     y = a.y - (dy < 0 ? h - 12 : 10); align = "left"; }
+  else                { x = a.x - w/2;   y = dy < 0 ? a.y - h - 7 : a.y + 7; align = "center"; }
+  const box = {x, y, w, h};
+  /* keep clear of the story text, the stage edges, visible labels and other callouts */
+  const sr = stage.getBoundingClientRect();
+  const texts = [...document.querySelectorAll(".step.on p, .step.on blockquote")];
+  const textRight = texts.length ? Math.max(...texts.map(e => e.getBoundingClientRect().right)) - sr.left : -Infinity;
+  if (x < Math.max(textRight + 24, -sr.left + 8) || x + w > innerWidth - sr.left - 12 || y < 4 || y + h > stage.clientHeight - 4) return null;
+  const hit = (p, q) => p.x < q.x + q.w + 24 && q.x < p.x + p.w + 24 && p.y < q.y + q.h + 12 && q.y < p.y + p.h + 12;
+  for (const lab of document.querySelectorAll(".region:not(.off)")) {
+    const r = lab.getBoundingClientRect(); if (hit(box, {x:r.left - sr.left, y:r.top - sr.top, w:r.width, h:r.height})) return null;
+  }
+  for (const o of others) if (o && hit(box, o)) return null;
+  return {...box, align, ex:a.x, ey:a.y, ang:Math.atan2(dy, dx)};
+}
+/* a freeform but smooth leader: one cubic curve from the dot to the text whose handles swing off to random sides,
+   so each callout sweeps its own way. Each callout's seed fixes its shape. */
+function loopy(p0, p1, seed){
+  const rnd = mulberry32(Math.floor(seed*1000) + 7);
+  const tx = p1.x - p0.x, ty = p1.y - p0.y, L = Math.hypot(tx, ty) || 1, nx = -ty/L, ny = tx/L;
+  const h1 = (rnd() - 0.5)*L*0.9, h2 = (rnd() - 0.5)*L*0.9;
+  const c1 = {x:p0.x + tx*0.3 + nx*h1, y:p0.y + ty*0.3 + ny*h1}, c2 = {x:p0.x + tx*0.7 + nx*h2, y:p0.y + ty*0.7 + ny*h2};
+  const f = v => v.toFixed(1);
+  return {d:`M${f(p0.x)},${f(p0.y)} C${f(c1.x)},${f(c1.y)} ${f(c2.x)},${f(c2.y)} ${f(p1.x)},${f(p1.y)}`, ang:Math.atan2(p1.y - c2.y, p1.x - c2.x)};
+}
+/* an open arrowhead at p pointing along ang: two short strokes swept back, drawn as one pen stroke */
+function arrowHead(p, ang){
+  const L = 7, spread = 0.5, f = v => v.toFixed(1);
+  const a = {x:p.x - L*Math.cos(ang - spread), y:p.y - L*Math.sin(ang - spread)}, b = {x:p.x - L*Math.cos(ang + spread), y:p.y - L*Math.sin(ang + spread)};
+  return `M${f(a.x)},${f(a.y)} L${f(p.x)},${f(p.y)} L${f(b.x)},${f(b.y)}`;
+}
+/* a quick pen loop round a dot: a slightly tilted oval that goes a little past one turn, widening as it goes so the ends don't meet */
+function penLoop(c, r, seed){
+  const rnd = mulberry32(Math.floor(seed*1000) + 3), a0 = rnd()*Math.PI*2, tilt = (rnd() - 0.5)*0.8, turn = 1.12 + rnd()*0.08;
+  const ct = Math.cos(tilt), st = Math.sin(tilt), pts = [];
+  for (let i = 0; i <= 48; i++) {
+    const u = i/48, a = a0 + u*turn*Math.PI*2, k = r*(0.94 + 0.16*u);
+    const x = Math.cos(a)*k*1.18, y = Math.sin(a)*k*0.9;
+    pts.push(`${(c.x + x*ct - y*st).toFixed(1)},${(c.y + x*st + y*ct).toFixed(1)}`);
+  }
+  return "M" + pts.join("L");
+}
+function placeCallout(){
+  for (const sl of slots) {
+    if (!sl.node) continue;
+    const others = slots.filter(o => o !== sl && o.node).map(o => o.box);
+    const b = (sl.stacked ? null : radialBox(sl.node, sl.el, others)) || sl.box;     /* hold the last good spot if the dot drifts into a tight corner */
+    if (!b) continue;
+    sl.box = b;
+    const d = dotOnStage(sl.node), r = sl.node.r*scale + 6, e = {x:b.ex, y:b.ey};
+    const L = Math.hypot(e.x - d.x, e.y - d.y) || 1, from = {x:d.x + (e.x - d.x)/L*r, y:d.y + (e.y - d.y)/L*r};
+    sl.ring.setAttribute("d", penLoop(d, r, sl.seed));
+    const line = loopy(from, e, sl.seed);
+    sl.path.setAttribute("d", line.d); sl.head.setAttribute("d", arrowHead(e, line.ang));
+    sl.el.style.textAlign = b.align;
+    sl.el.style.transform = `translate(${b.x}px,${b.y}px)`;
+  }
+}
+/* the pool: short statements on screen in this step, taking occupations in turn */
+function buildPool(kind){
+  if (Array.isArray(kind)) return kind.map(id => byId.get(id)).filter(Boolean);
+  /* "O": any O*NET task · "R": the Missing ones, O*NET tasks nothing in TaskNet mentions · otherwise TaskNet statements */
+  const ok = n => kind === "F" ? n.refining && n.text.length <= 110 : n.text.length <= 78 && (kind === "R" ? n.region === "R" : kind === "O" ? n.inv === "O" : n.inv === "S" && n.region !== "H");
+  const byOcc = new Map();
+  const rnd = mulberry32(kind === "O" ? 41 : kind === "R" ? 47 : 43);
+  for (const n of [...nodes].filter(ok).sort(() => rnd() - 0.5)) { if (!byOcc.has(n.occ)) byOcc.set(n.occ, []); byOcc.get(n.occ).push(n); }
+  const lanes = [...byOcc.values()], out = [];
+  while (lanes.some(l => l.length)) for (const l of lanes) if (l.length) out.push(l.shift());
+  return out;
+}
+function freeSlot(sl){
+  sl.timers.forEach(clearTimeout); sl.timers = [];
+  sl.g.classList.remove("show"); sl.g.classList.add("gone"); sl.el.classList.remove("show");
+  sl.timers.push(setTimeout(() => { sl.node = null; sl.box = null; }, FADE));
+}
+/* fallback for hand-picked examples: a caption above or below the Venn, on the dot's side only,
+   so its line never runs the length of the circle (if that side is taken, the task waits its turn) */
+function stackBox(n, el, others){
+  const d = dotOnStage(n), v = vennExtent(), sr = stage.getBoundingClientRect();
+  const texts = [...document.querySelectorAll(".step.on p, .step.on blockquote")];
+  const minX = texts.length ? Math.max(...texts.map(e => e.getBoundingClientRect().right)) - sr.left + 24 : 8;
+  const w = 260; el.style.width = w + "px";
+  const h = el.offsetHeight, x = clamp(d.x - w/2, minX, stage.clientWidth - w - 8);
+  const hit = (p, q) => p.x < q.x + q.w + 24 && q.x < p.x + p.w + 24 && p.y < q.y + q.h + 12 && q.y < p.y + p.h + 12;
+  const labels = [...document.querySelectorAll(".region:not(.off)")].map(l => { const r = l.getBoundingClientRect(); return {x:r.left - sr.left, y:r.top - sr.top, w:r.width, h:r.height}; });
+  for (const below of [d.y > (v.top + v.bottom)/2]) {
+    const y = below ? v.bottom + 26 : v.top - 26 - h, box = {x, y, w, h};
+    if (y < 4 || y + h > stage.clientHeight - 4) continue;
+    if (labels.some(l => hit(box, l)) || others.some(o => o && hit(box, o))) continue;
+    return {...box, align:"center", ex:clamp(d.x, x + 12, x + w - 12), ey:below ? y - 6 : y + h + 6, ang:below ? Math.PI/2 : -Math.PI/2};
+  }
+  return null;
+}
+/* a callout's text; in the "pair" view a refining statement comes with the O*NET task it refines, above it */
+function calloutHTML(n){
+  const parent = scene.refine && REFINE === "pair" && n.links.find(l => n.rel.get(l) === "refines");
+  return (parent ? `<span class="par">O*NET: ${esc(parent.text)}</span><span class="by">Refined by</span>` : "") + `${esc(n.text)}<cite>${esc(n.occ)}</cite>`;
+}
+function spawn(){
+  const sl = slots.find(x => !x.node);
+  if (!sl) return;
+  const live = slots.filter(x => x.node), shown = new Set(live.map(x => x.node)), others = live.map(x => x.box);
+  if (innerWidth <= 900 && live.length) return;            /* one caption at a time on phones */
+  let best = null;
+  for (let tries = 0; tries < pool.length; tries++) {
+    const n = pool[poolAt++ % pool.length];
+    if (shown.has(n) || !(n.a > 0.3)) continue;
+    sl.el.innerHTML = calloutHTML(n);
+    const r = radialBox(n, sl.el, others), b = r || (curated ? stackBox(n, sl.el, others) : null);
+    if (!b) continue;
+    b.stacked = !r;
+    /* a different direction from the callouts already showing and from the last one */
+    const far = [...live.map(x => x.box.ang), lastAng].filter(a => a != null).every(a => Math.abs(Math.atan2(Math.sin(b.ang - a), Math.cos(b.ang - a))) > 1.4);
+    if (far) { best = {n, b}; break; }
+    if (!best) best = {n, b, html:sl.el.innerHTML};
+  }
+  if (!best) return;
+  const {n, b} = best;
+  lastAng = b.ang;
+  sl.node = n; sl.box = b; sl.stacked = b.stacked; sl.seed = (poolAt*1.7) % 6.28;
+  sl.g.style.setProperty("--q", n.inv === "S" ? "var(--s)" : "var(--o)");
+  sl.el.innerHTML = calloutHTML(n);
+  placeCallout();
+  sl.g.classList.remove("gone", "show"); void sl.g.getBoundingClientRect();
+  sl.g.classList.add("show"); sl.el.classList.add("show");
+  if (!reduceMotion) sl.timers.push(setTimeout(() => freeSlot(sl), LIFE));
+}
+function showCallouts(kind){
+  spawnTimers.forEach(clearTimeout); spawnTimers = [];
+  for (const sl of slots) { freeSlot(sl); sl.node = null; }
+  if (!kind) return;
+  pool = buildPool(kind); poolAt = 0;
+  if (scene.theme) { const more = nodes.filter(n => n.region === "L" && n.themes.includes(scene.theme) && !pool.includes(n) && n.text.length <= 120); pool = [...pool, ...more]; } lastAng = null; curated = Array.isArray(kind) || kind === "R";   /* few Missing dots, so they may also caption above or below the Venn */
+  const start = reduceMotion ? 0 : scene.stars ? 3200 : 700;
+  spawnTimers.push(setTimeout(() => {
+    spawn();
+    if (reduceMotion) return;
+    const tick = () => { spawn(); spawnTimers.push(setTimeout(tick, SPAWN)); };
+    spawnTimers.push(setTimeout(tick, SPAWN));
+  }, start));
+}
+/* ---------------- fan view of refinement: broad O*NET tasks in turn, each with its refining statements ---------------- */
+const FAN_T = 6000;
+const fan = {node:null, kids:[], g:null, card:null, timer:null, at:0, list:null};
+function fanList(){
+  const ok = [...nodes].filter(o => o.hidden && o.links.filter(l => o.rel.get(l) === "refines").length >= 3);
+  const byOcc = new Map();
+  for (const o of ok.sort((a, b) => b.links.length - a.links.length)) { if (!byOcc.has(o.occ)) byOcc.set(o.occ, []); byOcc.get(o.occ).push(o); }
+  const lanes = [...byOcc.values()], out = [];
+  while (lanes.some(l => l.length)) for (const l of lanes) if (l.length) out.push(l.shift());
+  return out;
+}
+function clearFan(){
+  const {g, card} = fan;
+  if (g) { g.classList.remove("show"); g.classList.add("gone"); setTimeout(() => g.remove(), FADE); }
+  if (card) { card.classList.remove("show"); setTimeout(() => card.remove(), FADE); }
+  fan.node = null; fan.kids = []; fan.g = null; fan.card = null;
+}
+function showFan(){
+  clearFan();
+  fan.list ??= fanList();
+  const o = fan.list[fan.at++ % fan.list.length];
+  const kids = o.links.filter(l => o.rel.get(l) === "refines" && isVis(l));
+  fan.node = o; fan.kids = kids;
+  const g = document.createElementNS(SVG, "g"); g.style.setProperty("--q", "var(--s)");
+  fan.paths = kids.map((k, i) => {
+    const ring = document.createElementNS(SVG, "path"), line = document.createElementNS(SVG, "path");
+    ring.setAttribute("class", "ring"); line.setAttribute("class", "line");
+    for (const e of [ring, line]) { e.setAttribute("pathLength", "1"); e.style.transitionDelay = (e === ring ? 0 : .25) + i*0.08 + "s"; }
+    g.append(ring, line); return {k, ring, line, seed:(fan.at*2.3 + i*1.1) % 6.28};
+  });
+  lead.append(g); fan.g = g;
+  const card = document.createElement("div"); card.className = "fan-card";
+  const few = innerWidth <= 900 ? 0 : 3, more = kids.length - few;
+  card.innerHTML = `<span class="k">O*NET · ${esc(o.occ)}</span><span class="p">${esc(o.text)}</span><span class="by">Refined by ${kids.length} TaskNet tasks${few ? "" : ", circled above"}</span>`
+    + (few ? `<ul>${kids.slice(0, few).map(k => `<li>${esc(k.text)}</li>`).join("")}${more > 0 ? `<li style="list-style:none;color:var(--muted)">+${more} more</li>` : ""}</ul>` : "");
+  calloutBox$.append(card); fan.card = card;
+  placeFan();
+  void g.getBoundingClientRect(); g.classList.add("show"); card.classList.add("show");
+}
+function placeFan(){
+  if (!fan.card) return;
+  const v = vennExtent(), w = Math.min(stage.clientWidth - 16, 440);
+  fan.card.style.width = w + "px";
+  const x = clamp(v.cx - w/2, 8, stage.clientWidth - w - 8), y = v.bottom + 22;
+  fan.card.style.transform = `translate(${x}px,${y}px)`;
+  /* every line runs from the card's top edge, at one point under the dots, like roots from a single stem */
+  const mx = fan.paths.reduce((t, p) => t + dotOnStage(p.k).x, 0)/(fan.paths.length || 1);
+  for (const p of fan.paths) {
+    const d = dotOnStage(p.k), r = p.k.r*scale + 5, e = {x:clamp(mx, x + 20, x + w - 20), y:y - 6};
+    const L = Math.hypot(e.x - d.x, e.y - d.y) || 1, from = {x:d.x + (e.x - d.x)/L*r, y:d.y + (e.y - d.y)/L*r};
+    p.ring.setAttribute("d", penLoop(d, r, p.seed)); p.line.setAttribute("d", loopy(from, e, p.seed).d);
+  }
+}
+function runFan(on){
+  clearInterval(fan.timer); fan.timer = null; clearFan();
+  if (!on) return;
+  setTimeout(() => { if (scene.refine && REFINE === "fan") { showFan(); if (!reduceMotion) fan.timer = setInterval(showFan, FAN_T); } }, 700);
+}
+function setStep(name){
+  const entering = STEPS[name] !== scene;
+  if (entering) popT0 = null;
+  scene = STEPS[name] || STEPS.onet;
+  interactive = name === "explore";
+  $("ctas").classList.toggle("on", interactive); for (const a of $("ctas").children) a.tabIndex = interactive ? 0 : -1;
+  if (scene.pin !== undefined) selected = scene.pin ? byId.get(scene.pin) || null : null;
+  if (!interactive) hover = null;
+  for (const k of ["L","X","R","S","O"]) $("reg-" + k).classList.toggle("off", !scene.labels.includes(k));
+  for (const el of document.querySelectorAll(".step")) el.classList.toggle("on", el.dataset.step === name);
+  resize();
+  if (entering) { showCallouts(scene.callouts); runFan(!!scene.refine && REFINE === "fan"); }
+  if (booting && name !== "onet") snap = true;
+}
+const phone = matchMedia("(max-width:900px)").matches;
+const seen = new IntersectionObserver(es => { for (const e of es) if (e.isIntersecting) setStep(e.target.dataset.step); },
+  {rootMargin:phone ? "-58% 0px -36% 0px" : "-45% 0px -45% 0px"});
+for (const el of document.querySelectorAll(".step")) seen.observe(el);
+/* scroll-linked fade: a step's text comes up as it rises into the reading band and goes as it leaves
+   (on phones the band is the space under the pinned Venn) */
+const fading = [...document.querySelectorAll(".step:not(.linger)")];
+let fadeQueued = false;
+function fade(){
+  fadeQueued = false;
+  const vh = innerHeight, top = phone ? $("stage").getBoundingClientRect().bottom : vh*0.12, bottom = vh*0.92, band = vh*0.18;
+  for (const el of fading) {
+    const kids = [...el.children], r0 = kids[0].getBoundingClientRect(), r1 = kids[kids.length - 1].getBoundingClientRect();
+    const o = Math.min(clamp((bottom - r0.top)/band, 0, 1), clamp((r1.bottom - top)/band, 0, 1));
+    el.style.setProperty("--fade", o.toFixed(3));   /* not --o, which is the O*NET colour */
+  }
+}
+const queueFade = () => { if (!fadeQueued) { fadeQueued = true; requestAnimationFrame(fade); } };
+addEventListener("scroll", queueFade, {passive:true});
+/* a soft lock: once scrolling stops near a step, glide so its text sits in the reading spot
+   (mid-screen, or just under the pinned Venn on phones). It waits for the reader to stop, so it never fights a scroll */
+let settleTimer, settling = false;
+function settle(){
+  if (reduceMotion) return;
+  const vh = innerHeight, spot = phone ? $("stage").getBoundingClientRect().bottom + 24 : vh/2;
+  let best = null, bd = Infinity;
+  for (const el of fading) {
+    const kids = [...el.children], r0 = kids[0].getBoundingClientRect(), r1 = kids[kids.length - 1].getBoundingClientRect();
+    const d = phone ? r0.top - spot : (r0.top + Math.min(r1.bottom, r0.top + vh*0.8))/2 - spot;
+    if (Math.abs(d) < Math.abs(bd)) { bd = d; best = el; }
+  }
+  if (best && Math.abs(bd) > 4 && Math.abs(bd) < vh*0.22) { settling = true; scrollBy({top:bd, behavior:"smooth"}); setTimeout(() => { settling = false; }, 700); }
+}
+addEventListener("scroll", () => { if (settling) return; clearTimeout(settleTimer); settleTimer = setTimeout(settle, 220); }, {passive:true});
+addEventListener("resize", queueFade);
+fade();
+setStep("explore");   /* embedded at the top of the dashboard; the walkthrough lives in the video */
+/* tell the dashboard how tall this is, so its frame fits with no inner scrollbar */
+const tellHeight = () => parent.postMessage({tasknetExplorerHeight: Math.ceil(document.querySelector("main").getBoundingClientRect().height)}, "*");   /* the content, not the frame */
+new ResizeObserver(tellHeight).observe(document.body); addEventListener("load", tellHeight);
+setTimeout(() => { booting = false; }, 800);
+document.fonts.ready.then(() => { resize(); requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove("loading"))); });
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
