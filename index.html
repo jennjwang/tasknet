@@ -6,7 +6,7 @@
 <title>TaskNet · All tasks</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
 <style>
 /* Dashboard: every task in every occupation at once, as a waffle of squares per occupation (one square per task),
    laid out like the Anthropic Economic Index job explorer, in the type and palette of the main page, drawn by hand on graph paper. Hover or focus a square for the task, its links and ratings. */
@@ -19,10 +19,11 @@
   --new:#BABCEB; --linked:#92B1C8; --onet:#ABD2CA;
   --new-ink:#4347C7; --linked-ink:#5E86A8; --onet-ink:#34826B;
   --card:#FFFFFF;
-  --f-sans:"Inter","Helvetica Neue",Arial,system-ui,sans-serif;
+  --f-sans:"Public Sans","Helvetica Neue",Arial,system-ui,sans-serif;   /* the U.S. government's typeface, at home beside O*NET */
+  --f-serif:"Source Serif 4",Georgia,"Times New Roman",serif;
 }
 *{box-sizing:border-box}
-body{margin:0;color:var(--ink);font-family:var(--f-sans);font-feature-settings:"ss01","cv11";-webkit-font-smoothing:antialiased}
+body{margin:0;color:var(--ink);font-family:var(--f-sans);-webkit-font-smoothing:antialiased}
 html{background:var(--bg)}
 .paper{position:fixed;inset:0;z-index:-1;width:100%;height:100%;pointer-events:none}
 .page{width:min(1240px,100vw - 32px);margin:0 auto;padding:40px 0 72px}
@@ -31,9 +32,12 @@ html{background:var(--bg)}
 .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 /* a splash title, set like the paper's own title block but large: the name in purple, then the byline with numbered affiliations */
 .heading{padding-block:56px 44px;border-bottom:1px solid var(--rule);text-align:left}
-.heading h1{max-width:24ch}
+.heading h1{max-width:30ch}
 .authors{display:flex;flex-wrap:wrap;gap:8px 24px;margin:34px 0 0;font-size:26px;font-weight:500;letter-spacing:-.01em;color:var(--ink)}
 .affils{display:flex;flex-wrap:wrap;gap:4px 28px;margin:16px 0 0;font-size:23px;color:var(--muted)}
+.dl{margin:20px 0 0;font-size:18px;color:var(--muted)}
+.dl a{color:var(--s-ink);font-weight:600;text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:3px}
+.dl a:hover{color:var(--s)}
 .notes{margin:12px 0 0;font-size:20px;color:var(--agate)}
 .heading sup{font-size:.78em;margin-left:2px;font-weight:500}
 @media (max-width:620px){.heading{padding-block:32px 28px}.authors{font-size:21px;gap:4px 18px}.affils{font-size:18px;gap:2px 16px}}
@@ -51,16 +55,16 @@ html{background:var(--bg)}
 .rk dt{font-size:20.5px;font-weight:600} .rk dd{margin:0;font-size:20.5px;line-height:1.55;color:var(--ink);text-wrap:pretty}
 @media (max-width:760px){.rk{grid-template-columns:minmax(0,1fr);gap:24px}.rk dl div{grid-template-columns:120px minmax(0,1fr)}}
 .stages{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:40px;margin:0;padding:0;list-style:none;counter-reset:stage}
-.stages > li{padding:26px 28px 28px;background:var(--s-tint);border-radius:14px}   /* each step on its own tinted card */
+.stages > li{padding:18px 0 0;border-top:2px solid var(--s)}   /* each step under a rule, not on a card */
 .stages li{counter-increment:stage}
 .stages h3{display:flex;align-items:baseline;gap:10px;margin:0 0 12px;font-size:28px;font-weight:600;color:var(--s)}
-.stages h3::before{content:counter(stage);font-size:1em;font-weight:700;line-height:1;color:var(--s)}
+.stages h3::before{content:none}
 .stages .fig{margin:0 0 14px;font-size:21px;color:var(--ink)} .stages .fig b{font-size:23px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
 .stages p,.method .compare p{margin:0;font-size:20.5px;line-height:1.6;color:var(--ink);text-wrap:pretty}
 @media (max-width:780px){.stages{grid-template-columns:minmax(0,1fr);gap:16px}.method{margin-top:48px}}
 /* one section heading style for the whole page */
-.sec,.method h2{margin:0;font-size:30px;font-weight:700;letter-spacing:-.015em;text-align:left}
-h1{margin:0;font-size:clamp(34px,4.4vw,60px);font-weight:700;letter-spacing:-.035em;line-height:1.02;color:var(--ink);text-wrap:balance}
+.sec,.method h2{margin:0;font-family:var(--f-serif);font-size:32px;font-weight:600;letter-spacing:-.01em;text-align:left}
+h1{margin:0;font-family:var(--f-serif);font-size:clamp(34px,4.4vw,58px);font-weight:600;letter-spacing:-.015em;line-height:1.06;color:var(--ink);text-wrap:balance}
 h1 span{color:var(--s)}
 .info{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,380px);align-items:end;gap:12px 32px;margin-bottom:24px}
 .intro{min-width:0}
@@ -84,7 +88,7 @@ h1 span{color:var(--s)}
 .key button:focus-visible{outline:2px solid var(--s);outline-offset:3px}
 
 .toolbar{display:flex;align-items:center;gap:16px}
-.searchbar{display:flex;align-items:center;gap:10px;width:100%;height:48px;padding:0 12px;background:#fff;border:1px solid var(--field);border-radius:8px}
+.searchbar{display:flex;align-items:center;gap:10px;width:100%;height:48px;padding:0 12px;background:#fff;border:1px solid var(--field);border-radius:3px}
 .searchbar:focus-within{border-color:var(--s)}
 .searchbar input{flex:1;height:44px;border:0;outline:none;background:none;font:inherit;font-size:20px;color:var(--ink)}
 .searchbar input::placeholder{color:var(--agate)}
@@ -106,10 +110,10 @@ h1 span{color:var(--s)}
 .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;max-width:1240px;margin:0 auto}
 @media (max-width:1000px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:620px){.grid{grid-template-columns:minmax(0,1fr)}}
-.occ{min-width:0;padding:20px 22px 18px;background:var(--card);border:1px solid var(--rule);border-radius:10px;text-align:left}
+.occ{min-width:0;padding:18px 0 0;border-top:1px solid var(--ink);text-align:left}
 .occ h2{margin:0 0 2px;font-size:20.5px;font-weight:600;letter-spacing:-.01em;color:var(--ink)}
 .occ .cat{margin:0 0 14px;font-size:15.5px;line-height:1;color:var(--agate)}
-.occ svg{display:block;margin:0;overflow:visible;filter:url(#mk-grain)}   /* grain only: square, straight edges */
+.occ svg{display:block;margin:0;overflow:visible}
 .occ .t{cursor:pointer;outline:none;transition:opacity .15s;transform-box:fill-box;transform-origin:center}
 /* squares grow in smoothly a few at a time; the one in focus gets a plain dark outline */
 .grid.drawing .t{animation:grow .9s cubic-bezier(.34,1.45,.64,1) backwards}
@@ -180,12 +184,13 @@ mark{background:#FFF0B3;color:inherit;border-radius:2px}
   <p class="authors"><span>Jennifer Wang<sup>1*</sup></span><span>Andy Haupt<sup>1*</sup></span><span>Isaac Robinson<sup>2</sup></span><span>Phil Lewis<sup>3</sup></span><span>Erik Brynjolfsson<sup>1†</sup></span><span>Diyi Yang<sup>1†</sup></span></p>
   <p class="affils"><span><sup>1</sup>Stanford University</span><span><sup>2</sup>Mercor</span><span><sup>3</sup>National Center for O*NET Development</span></p>
   <p class="notes"><sup>*</sup>Equal contribution · <sup>†</sup>Equal supervision</p>
+  <p class="dl">Download the data: <a href="data.csv" download>Tasks and ratings (CSV)</a> · <a href="relationships.csv" download>TaskNet–O*NET links (CSV)</a></p>
 </header>
 
 
 
 <section class="explore" aria-label="Task explorer">
-    <iframe class="explorer" id="explorer" src="explorer.html?v=1793030275" title="Explore the task Venn: hover a dot to read it and its ratings" loading="eager"></iframe>
+    <iframe class="explorer" id="explorer" src="explorer.html?v=1793034439" title="Explore the task Venn: hover a dot to read it and its ratings" loading="eager"></iframe>
 </section>
 
 <div class="info">

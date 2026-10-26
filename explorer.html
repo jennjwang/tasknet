@@ -6,7 +6,7 @@
 <title>TaskNet</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
 <style>
 /* TaskNet (left) and O*NET (right) as a Venn; the overlap holds linked tasks, as in the paper's figure. Type and palette follow the paper's figure. */
 :root{
@@ -16,11 +16,12 @@
   --s:#4347C7; --s-fill:#BABCEB; --s-line:#9296DF; --s-ink:#292D72; --s-tint:#EEEEF9;
   --o:#34826B; --o-fill:#ABD2CA; --o-line:#7DB7AB; --o-ink:#225345; --o-tint:#E8F2EF;
   --x-fill:#92B1C8;
-  --f-sans:"Inter","Helvetica Neue",Arial,system-ui,sans-serif;
+  --f-sans:"Public Sans","Helvetica Neue",Arial,system-ui,sans-serif;   /* the U.S. government's typeface, at home beside O*NET */
+  --f-serif:"Source Serif 4",Georgia,"Times New Roman",serif;
 }
 *{box-sizing:border-box}
 html{overflow:hidden}
-body{margin:0;color:var(--ink);font-family:var(--f-sans);font-feature-settings:"ss01","cv11";-webkit-font-smoothing:antialiased}
+body{margin:0;color:var(--ink);font-family:var(--f-sans);-webkit-font-smoothing:antialiased}
 html{background:transparent}   /* embedded: the dashboard draws the paper */
 .paper{position:fixed;inset:0;z-index:-1;width:100%;height:100%;pointer-events:none}
 /* scroll and tell: story steps scroll on the left while the Venn stays pinned on the right; both sit in the vertical middle of the screen */
@@ -198,7 +199,7 @@ body.loading .scrolly{opacity:0}
 .links .lg button i{display:none}
 .links .lg button:not([disabled]):hover span{text-decoration:underline;text-decoration-color:var(--rule);text-underline-offset:3px}
 /* each linked task on a pale block of the other inventory's colour */
-.lg ul{gap:10px} .lg li{padding:12px 16px;border-radius:8px;background:var(--o-tint)}
+.lg ul{gap:10px} .lg li{padding:12px 16px;border-radius:2px;background:var(--o-tint)}
 .detail.o .lg li{background:var(--s-tint)}
 </style>
 </head>
@@ -965,7 +966,7 @@ function resize(){
   const w = stage.clientWidth;
   const st = getComputedStyle(stage), room = stage.clientHeight - parseFloat(st.paddingTop) - parseFloat(st.paddingBottom);
   scale = Math.min(w / W, Math.max(200, room) / H); dpr = devicePixelRatio || 1;
-  R_DOT = clamp(DOT_PX / scale, 3, 8);
+  R_DOT = clamp(Math.min(DOT_PX, W*scale/110) / scale, 2.4, 8);   /* dots shrink with the Venn, so a phone-size Venn doesn't crowd */
   canvas.style.width = W*scale + "px"; canvas.style.height = H*scale + "px";
   canvas.width = Math.round(W*scale*dpr); canvas.height = Math.round(H*scale*dpr);
   const cnt = k => nodes.filter(n => n.region === k && isVis(n)).length;
@@ -1234,9 +1235,6 @@ function draw(){
   }
   ctx.globalAlpha = 1;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.globalCompositeOperation = "destination-out"; ctx.fillStyle = grain;
-  ctx.translate(-boil*67, -boil*41); ctx.fillRect(0, 0, canvas.width + 300, canvas.height + 300);
-  ctx.globalCompositeOperation = "source-over";
 }
 
 /* ---------------- detail card: hover previews, click pins ---------------- */
